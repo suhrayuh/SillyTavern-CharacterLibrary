@@ -31,6 +31,7 @@ const {
     formatRichText,
     sanitizeTaglineHtml,
     renderLoadingState,
+    renderSkeletonGrid,
     getSetting,
     setSetting,
     setSettings,
@@ -643,6 +644,11 @@ class WyvernBrowseView extends BrowseView {
             { dropdownId: 'wyvernFiltersDropdown', buttonId: 'wyvernFiltersBtn' },
             { dropdownId: 'wyvernTagsDropdown', buttonId: 'wyvernTagsBtn' },
         ]);
+    }
+
+    getSearchModes() { return ['character', 'creator']; }
+    getSearchInputId(mode) {
+        return mode === 'creator' ? 'wyvernCreatorSearchInput' : 'wyvernSearchInput';
     }
 
     applyDefaults(defaults) {
@@ -1619,7 +1625,7 @@ async function loadWyvernCharacters(forceRefresh = false) {
     const loadMoreBtn = document.getElementById('wyvernLoadMoreBtn');
 
     if (wyvernCurrentPage === 1) {
-        renderLoadingState(grid, 'Loading Wyvern characters...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     wyvernIsLoading = true;
@@ -1866,7 +1872,7 @@ async function loadWyvernFollowing(forceRefresh = false) {
     }
 
     if (grid) {
-        renderLoadingState(grid, 'Loading timeline...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     try {
@@ -2066,7 +2072,7 @@ async function loadWyvernCreatorCharacters(uid, displayName, vanityUrl) {
     const grid = document.getElementById('wyvernGrid');
     wyvernBrowseView.updateLoadMoreVisibility('wyvernLoadMore', false, true);
 
-    renderLoadingState(grid, `Loading characters by ${escapeHtml(displayName)}...`, 'browse-loading');
+    renderSkeletonGrid(grid);
 
     try {
         const headers = getWyvernHeaders(wyvernNsfwEnabled && !!wyvernToken);

@@ -28,6 +28,7 @@ const {
     formatRichText,
     sanitizeTaglineHtml,
     renderLoadingState,
+    renderSkeletonGrid,
     getSetting,
     setSetting,
     setSettings,
@@ -809,6 +810,11 @@ class ChubBrowseView extends BrowseView {
             { dropdownId: 'chubFiltersDropdown', buttonId: 'chubFiltersBtn' },
             { dropdownId: 'chubTagsDropdown', buttonId: 'chubTagsBtn' },
         ]);
+    }
+
+    getSearchModes() { return ['character', 'creator']; }
+    getSearchInputId(mode) {
+        return mode === 'creator' ? 'chubCreatorSearchInput' : 'chubSearchInput';
     }
 
     applyDefaults(defaults) {
@@ -1885,7 +1891,7 @@ async function switchChubViewMode(mode) {
         
         const grid = document.getElementById('chubGrid');
         if (grid) {
-            renderLoadingState(grid, 'Loading ChubAI characters...', 'browse-loading');
+            renderSkeletonGrid(grid);
         }
         
         // Always reload browse data when switching to it to avoid stale/mixed data
@@ -1945,7 +1951,7 @@ async function loadChubTimeline(forceRefresh = false, _isAutoPage = false, _appe
     if (!_isAutoPage) chubTimelineLoadInFlight = true;
 
     if (forceRefresh || (!chubTimelineCursor && chubTimelineCharacters.length === 0)) {
-        renderLoadingState(grid, 'Loading timeline...', 'browse-loading');
+        renderSkeletonGrid(grid);
         if (forceRefresh) {
             chubTimelineCharacters = [];
             chubTimelinePage = 1;
@@ -2767,7 +2773,7 @@ async function loadChubCharacters(forceRefresh = false) {
     const loadMoreBtn = document.getElementById('chubLoadMoreBtn');
 
     if (chubCurrentPage === 1) {
-        renderLoadingState(grid, 'Loading ChubAI characters...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
     
     chubIsLoading = true;
@@ -3048,7 +3054,7 @@ async function loadChubFavorites(forceRefresh = false, loadToken = 0) {
     const loadMoreContainer = document.getElementById('chubLoadMore');
     
     if (chubCurrentPage === 1) {
-        renderLoadingState(grid, 'Loading your favorites...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
     
     chubIsLoading = true;

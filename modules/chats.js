@@ -172,6 +172,17 @@ async function openChat(char, chatFile) {
             CoreAPI.registerGalleryFolderOverride(char, true);
         }
 
+        // Embedded mode: single postMessage so ST handles it atomically (matches cl-open-character flow)
+        if (CoreAPI.getIsEmbedded() && window.parent !== window) {
+            window.parent.postMessage({
+                source: 'character-library',
+                type: 'cl-open-chat',
+                avatar: char.avatar,
+                chatName,
+            }, window.location.origin);
+            return;
+        }
+
         const host = CoreAPI.getHostWindow();
         if (host) {
             let context = null;
@@ -191,10 +202,6 @@ async function openChat(char, chatFile) {
 
                 if (context.openCharacterChat) {
                     await context.openCharacterChat(chatName);
-                }
-
-                if (CoreAPI.getIsEmbedded()) {
-                    CoreAPI.closeEmbeddedPanel();
                 }
 
                 return;
@@ -625,13 +632,25 @@ async function fetchFreshChats(isBackground = false) {
 
         if (signal.aborted) return;
         if (newChats.length === 0 && !isBackground) {
-            chatsGrid.innerHTML = `
-                <div class="chats-empty">
-                    <i class="fa-solid fa-comments"></i>
-                    <h3>No Chats Found</h3>
-                    <p>Start a conversation with a character to see it here.</p>
-                </div>
-            `;
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            if (isMobile) {
+                CoreAPI.renderEmptyState(chatsGrid, {
+                    icon: 'fa-solid fa-ghost',
+                    title: 'No chats yet',
+                    hint: 'Start a conversation with any character to see it here. Open a character from the Characters tab and send your first message.',
+                    actionLabel: 'Browse characters',
+                    actionIcon: 'fa-solid fa-users',
+                    onAction: () => CoreAPI.switchView?.('characters'),
+                });
+            } else {
+                chatsGrid.innerHTML = `
+                    <div class="chats-empty">
+                        <i class="fa-solid fa-comments"></i>
+                        <h3>No Chats Found</h3>
+                        <p>Start a conversation with a character to see it here.</p>
+                    </div>
+                `;
+            }
             return;
         }
 

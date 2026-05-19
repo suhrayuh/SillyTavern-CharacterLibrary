@@ -6,8 +6,8 @@
     <meta name="color-scheme" content="dark">
     <meta name="referrer" content="no-referrer">
     <title>SillyTavern Character Library</title>
-    <link rel="stylesheet" href="library.css?v=80">
-    <link rel="stylesheet" href="library-mobile.css?v=10" media="screen and (max-width: 768px)">
+    <link rel="stylesheet" href="library.css?v=82">
+    <link rel="stylesheet" href="library-mobile.css?v=12" media="screen and (max-width: 768px)">
     <!-- Noto Sans from SillyTavern's bundled webfonts -->
     <link rel="stylesheet" href="/webfonts/NotoSans/stylesheet.css">
     <!-- Font Awesome for Icons -->
@@ -491,16 +491,16 @@
                             </h4>
                             <div class="form-group">
                                 <label>Character Name</label>
-                                <input type="text" id="editName" class="glass-input" autocomplete="one-time-code">
+                                <input type="search" id="editName" class="glass-input" autocomplete="one-time-code">
                             </div>
                             <div class="form-row">
                                 <div class="form-group half">
                                     <label>Creator / Author</label>
-                                    <input type="text" id="editCreator" class="glass-input" placeholder="Who made this character" autocomplete="one-time-code">
+                                    <input type="search" id="editCreator" class="glass-input" placeholder="Who made this character" autocomplete="one-time-code">
                                 </div>
                                 <div class="form-group half">
                                     <label>Character Version</label>
-                                    <input type="text" id="editVersion" class="glass-input" placeholder="e.g., 1.0" autocomplete="one-time-code">
+                                    <input type="search" id="editVersion" class="glass-input" placeholder="e.g., 1.0" autocomplete="one-time-code">
                                 </div>
                             </div>
                         </div>
@@ -714,13 +714,13 @@
     </div>
 
     <!-- Provider Link Modal -->
-    <div id="providerLinkModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content provider-link-modal-content">
-            <div class="confirm-modal-header">
+    <div id="providerLinkModal" class="cl-modal">
+        <div class="cl-modal-content provider-link-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-link"></i> <span id="providerLinkModalTitle">Provider Link</span></h3>
-                <button class="close-confirm-btn" id="closeProviderLinkModal">&times;</button>
+                <button class="cl-modal-close" id="closeProviderLinkModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body provider-link-modal-body">
+            <div class="cl-modal-body provider-link-modal-body">
                 <!-- Character sidebar with avatar -->
                 <div class="provider-link-sidebar">
                     <div class="provider-link-avatar-wrapper">
@@ -800,13 +800,13 @@
     </div>
 
     <!-- Import Summary Modal -->
-    <div id="importSummaryModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content chub-gallery-modal-content">
-            <div class="confirm-modal-header">
+    <div id="importSummaryModal" class="cl-modal">
+        <div class="cl-modal-content chub-gallery-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-circle-info"></i> Additional Content Available</h3>
-                <button class="close-confirm-btn" id="closeImportSummaryModal">&times;</button>
+                <button class="cl-modal-close" id="closeImportSummaryModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <p>The imported character(s) have additional content:</p>
                 <div id="importSummaryList" class="import-summary-list">
                     <!-- Row for Embedded Media -->
@@ -854,20 +854,20 @@
                     </div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="importSummaryDownloadAllBtn" class="action-btn download-all-btn"><i class="fa-solid fa-cloud-arrow-down"></i> Download All</button>
             </div>
         </div>
     </div>
 
     <!-- Import Characters Modal -->
-    <div id="importModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content import-modal-content">
-            <div class="confirm-modal-header">
+    <div id="importModal" class="cl-modal">
+        <div class="cl-modal-content import-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-download"></i> Import Characters</h3>
-                <button class="close-confirm-btn" id="closeImportModal">&times;</button>
+                <button class="cl-modal-close" id="closeImportModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <!-- Import source toggle -->
                 <div class="import-source-toggle">
                     <button class="import-source-btn active" data-source="url">
@@ -950,20 +950,20 @@ https://jannyai.com/characters/uuid_slug
                     <div id="importLog" class="import-log"></div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="startImportBtn" class="action-btn primary"><i class="fa-solid fa-download"></i> Import</button>
             </div>
         </div>
     </div>
 
     <!-- Localize Media Modal -->
-    <div id="localizeModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content import-modal-content">
-            <div class="confirm-modal-header">
+    <div id="localizeModal" class="cl-modal">
+        <div class="cl-modal-content import-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-download"></i> Download Remote Media</h3>
-                <button class="close-confirm-btn" id="closeLocalizeModal">&times;</button>
+                <button class="cl-modal-close" id="closeLocalizeModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <p id="localizeStatus">Scanning character for remote media...</p>
                 <div id="localizeProgress" class="import-progress">
                     <div class="import-progress-header">
@@ -976,20 +976,20 @@ https://jannyai.com/characters/uuid_slug
                     <div id="localizeLog" class="import-log"></div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="closeLocalizeBtn" class="action-btn secondary"><i class="fa-solid fa-times"></i> Close</button>
             </div>
         </div>
     </div>
 
     <!-- Bulk Localize Media Modal -->
-    <div id="bulkLocalizeModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content import-modal-content bulk-localize-modal-content">
-            <div class="confirm-modal-header">
+    <div id="bulkLocalizeModal" class="cl-modal">
+        <div class="cl-modal-content import-modal-content bulk-localize-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-download"></i> Bulk Media Localization</h3>
-                <button class="close-confirm-btn" id="closeBulkLocalizeModal">&times;</button>
+                <button class="cl-modal-close" id="closeBulkLocalizeModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <div id="bulkLocalizeCharInfo" class="bulk-localize-char-info">
                     <img id="bulkLocalizeCharAvatar" src="" alt="">
                     <span id="bulkLocalizeCharName">Preparing...</span>
@@ -1017,20 +1017,20 @@ https://jannyai.com/characters/uuid_slug
                     <div class="stat-item" title="Downloads that failed"><i class="fa-solid fa-xmark"></i> <span id="bulkStatErrors">0</span> errors</div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="cancelBulkLocalizeBtn" class="action-btn secondary"><i class="fa-solid fa-stop"></i> Stop</button>
             </div>
         </div>
     </div>
 
     <!-- Bulk Localize Summary Modal -->
-    <div id="bulkLocalizeSummaryModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content bulk-summary-modal-content">
-            <div class="confirm-modal-header">
+    <div id="bulkLocalizeSummaryModal" class="cl-modal">
+        <div class="cl-modal-content bulk-summary-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-chart-bar"></i> Bulk Localization Complete</h3>
-                <button class="close-confirm-btn" id="closeBulkSummaryModal">&times;</button>
+                <button class="cl-modal-close" id="closeBulkSummaryModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <div id="bulkSummaryOverview" class="bulk-summary-overview">
                     <!-- Overview stats go here -->
                 </div>
@@ -1056,20 +1056,20 @@ https://jannyai.com/characters/uuid_slug
                     <button id="bulkSummaryNextBtn" class="glass-btn icon-only"><i class="fa-solid fa-chevron-right"></i></button>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="closeBulkSummaryBtn" class="action-btn primary"><i class="fa-solid fa-check"></i> Done</button>
             </div>
         </div>
     </div>
 
     <!-- Bulk Auto-Link Modal -->
-    <div id="bulkAutoLinkModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content bulk-auto-link-modal-content">
-            <div class="confirm-modal-header">
+    <div id="bulkAutoLinkModal" class="cl-modal">
+        <div class="cl-modal-content bulk-auto-link-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-link"></i> Auto-Link Characters</h3>
-                <button class="close-confirm-btn" id="closeBulkAutoLinkModal">&times;</button>
+                <button class="cl-modal-close" id="closeBulkAutoLinkModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <!-- Scanning Phase -->
                 <div id="bulkAutoLinkScanning" class="bulk-auto-link-phase">
                     <div class="bulk-auto-link-scan-info">
@@ -1117,7 +1117,7 @@ https://jannyai.com/characters/uuid_slug
                     </div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="bulkAutoLinkCancelBtn" class="action-btn secondary"><i class="fa-solid fa-stop"></i> Stop</button>
                 <button id="bulkAutoLinkApplyBtn" class="action-btn primary hidden"><i class="fa-solid fa-link"></i> Link Selected (<span id="bulkAutoLinkSelectedCount">0</span>)</button>
             </div>
@@ -1125,15 +1125,15 @@ https://jannyai.com/characters/uuid_slug
     </div>
 
     <!-- Help & Tips Modal -->
-    <div id="galleryInfoModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content gallery-info-modal-content">
-            <div class="confirm-modal-header">
+    <div id="galleryInfoModal" class="cl-modal">
+        <div class="cl-modal-content gallery-info-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-circle-info"></i> Help & Tips</h3>
                 <div class="help-search-bar">
                     <i class="fa-solid fa-magnifying-glass"></i>
                     <input type="search" id="helpSearchInput" class="glass-input" placeholder="Search..." autocomplete="one-time-code" spellcheck="false">
                 </div>
-                <button class="close-confirm-btn" id="closeGalleryInfoModal">&times;</button>
+                <button class="cl-modal-close" id="closeGalleryInfoModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="help-layout">
                 <nav class="help-sidebar">
@@ -1733,20 +1733,20 @@ https://jannyai.com/characters/uuid_slug
 
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="closeGalleryInfoModalBtn" class="action-btn secondary"><i class="fa-solid fa-check"></i> Got it</button>
             </div>
         </div>
     </div>
 
     <!-- Character Duplicates Scan Modal -->
-    <div id="charDuplicatesModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content char-duplicates-modal-content">
-            <div class="confirm-modal-header">
+    <div id="charDuplicatesModal" class="cl-modal">
+        <div class="cl-modal-content char-duplicates-modal-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-clone"></i> Character Duplicates</h3>
-                <button class="close-confirm-btn" id="closeCharDuplicatesModal">&times;</button>
+                <button class="cl-modal-close" id="closeCharDuplicatesModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <div id="charDuplicatesScanStatus" class="char-duplicates-status">
                     <i class="fa-solid fa-spinner fa-spin"></i> Scanning library for duplicates...
                 </div>
@@ -1754,20 +1754,20 @@ https://jannyai.com/characters/uuid_slug
                     <!-- Duplicate groups will be populated here -->
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="closeCharDuplicatesModalBtn" class="action-btn secondary"><i class="fa-solid fa-check"></i> Done</button>
             </div>
         </div>
     </div>
 
     <!-- Pre-Import Duplicate Warning Modal -->
-    <div id="preImportDuplicateModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content pre-import-duplicate-content">
-            <div class="confirm-modal-header">
+    <div id="preImportDuplicateModal" class="cl-modal">
+        <div class="cl-modal-content pre-import-duplicate-content">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-exclamation-triangle"></i> Potential Duplicate Found</h3>
-                <button class="close-confirm-btn" id="closePreImportDuplicateModal">&times;</button>
+                <button class="cl-modal-close" id="closePreImportDuplicateModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="confirm-modal-body">
+            <div class="cl-modal-body">
                 <div id="preImportDuplicateInfo" class="pre-import-info">
                     <!-- Import character info -->
                 </div>
@@ -1775,7 +1775,7 @@ https://jannyai.com/characters/uuid_slug
                     <!-- Existing matches will be populated here -->
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="preImportSkipBtn" class="action-btn secondary"><i class="fa-solid fa-ban"></i> Skip Import</button>
                 <button id="preImportAnyway" class="action-btn secondary"><i class="fa-solid fa-plus"></i> Import Anyway</button>
                 <button id="preImportReplaceBtn" class="action-btn primary"><i class="fa-solid fa-rotate"></i> Replace Existing</button>
@@ -1804,15 +1804,15 @@ https://jannyai.com/characters/uuid_slug
     </div>
 
     <!-- Gallery Settings Modal -->
-    <div id="gallerySettingsModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content settings-modal-content settings-with-sidebar">
-            <div class="confirm-modal-header">
+    <div id="gallerySettingsModal" class="cl-modal">
+        <div class="cl-modal-content settings-modal-content settings-with-sidebar">
+            <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-gear"></i> Gallery Settings</h3>
                 <div class="settings-search-bar">
                     <i class="fa-solid fa-search"></i>
                     <input type="search" id="settingsSearchInput" class="glass-input" placeholder="Search..." autocomplete="one-time-code">
                 </div>
-                <button class="close-confirm-btn" id="closeSettingsModal">&times;</button>
+                <button class="cl-modal-close" id="closeSettingsModal"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="settings-layout">
                 <!-- Settings Sidebar Navigation -->
@@ -2057,6 +2057,30 @@ https://jannyai.com/characters/uuid_slug
                                     <input type="checkbox" id="settingsMobileProviderQuickSwitch" checked> Provider quick switch <i class="fa-solid fa-mobile-screen settings-platform-badge" title="Mobile only"></i>
                                 </label>
                                 <span class="settings-hint">Show a provider icon button next to the view tabs for quick provider switching in the Online view</span>
+                            </div>
+                            <div class="settings-row" data-platform="mobile">
+                                <label>
+                                    <input type="checkbox" id="settingsMobileHideBackArrows"> Hide modal back-arrows <i class="fa-solid fa-mobile-screen settings-platform-badge" title="Mobile only"></i>
+                                </label>
+                                <span class="settings-hint">Removes the back-arrow buttons in modal headers. Frees up header space so titles can breathe. Use the Android back button to close modals.</span>
+                            </div>
+                            <div class="settings-row" data-platform="mobile">
+                                <label>
+                                    <input type="checkbox" id="settingsMobileBrowseQuickImport" checked> Quick-import button on browse previews <i class="fa-solid fa-mobile-screen settings-platform-badge" title="Mobile only"></i>
+                                </label>
+                                <span class="settings-hint">Shows a single icon-only Download / Import / Extract button mirroring the primary action's state (accent / warning / in-library). When disabled, all actions live behind a kebab popover instead.</span>
+                            </div>
+                            <div class="settings-row" data-platform="mobile">
+                                <label>
+                                    <input type="checkbox" id="settingsMobileSwipeGestures" checked> Swipe gestures on character cards <i class="fa-solid fa-mobile-screen settings-platform-badge" title="Mobile only"></i>
+                                </label>
+                                <span class="settings-hint">Swipe right on a card to toggle favorite, swipe left to open the context menu. Disable to suppress accidental triggers.</span>
+                            </div>
+                            <div class="settings-row" data-platform="mobile">
+                                <label>
+                                    <input type="checkbox" id="settingsMobileHaptics" checked> Haptic feedback <i class="fa-solid fa-mobile-screen settings-platform-badge" title="Mobile only"></i>
+                                </label>
+                                <span class="settings-hint">Short vibrations on swipe actions, toggles, and destructive confirms. Requires device support.</span>
                             </div>
                         </div>
 
@@ -2744,10 +2768,71 @@ https://jannyai.com/characters/uuid_slug
                     </div>
                 </div>
             </div>
-            <div class="confirm-modal-footer">
+            <div class="cl-modal-footer">
                 <button id="resetSettingsBtn" class="action-btn secondary"><i class="fa-solid fa-undo"></i> Restore Defaults</button>
                 <button id="saveSettingsBtn" class="action-btn primary"><i class="fa-solid fa-check"></i> Save Settings</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Mobile bottom navigation: primary nav within thumb zone. Hidden on desktop via CSS. -->
+    <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Primary navigation">
+        <button class="mobile-bottom-nav-tab active" data-view="characters" type="button" aria-label="Characters">
+            <i class="fa-solid fa-users mobile-bottom-nav-icon"></i>
+            <span class="mobile-bottom-nav-label">Characters</span>
+        </button>
+        <button class="mobile-bottom-nav-tab" data-view="chats" type="button" aria-label="Chats">
+            <i class="fa-solid fa-comments mobile-bottom-nav-icon"></i>
+            <span class="mobile-bottom-nav-label">Chats</span>
+        </button>
+        <button class="mobile-bottom-nav-tab" data-view="online" type="button" aria-label="Online">
+            <i class="fa-solid fa-globe mobile-bottom-nav-icon"></i>
+            <span class="mobile-bottom-nav-label">Online</span>
+        </button>
+        <div class="mobile-bottom-nav-actions" aria-hidden="false">
+        <button class="mobile-bottom-nav-action" id="mobileNavFiltersBtn" type="button" aria-label="Filters and sort">
+            <i class="fa-solid fa-sliders mobile-bottom-nav-icon"></i>
+            <span class="mobile-bottom-nav-label">Filters</span>
+        </button>
+        <button class="mobile-bottom-nav-action" id="mobileNavMoreBtn" type="button" aria-label="More options">
+            <i class="fa-solid fa-ellipsis-vertical mobile-bottom-nav-icon"></i>
+            <span class="mobile-bottom-nav-label">More</span>
+        </button>
+        </div>
+    </nav>
+
+    <!-- Mobile floating action button: per-view primary action. JS configures icon+behavior per view. -->
+    <button id="mobileFab" class="mobile-fab hidden" type="button" aria-label="Primary action">
+        <i class="fa-solid fa-plus"></i>
+    </button>
+
+    <!-- Mobile Online search overlay, spawned by the FAB on Online view. -->
+    <div id="mobileOnlineSearchOverlay" class="mobile-online-search-overlay hidden" aria-hidden="true">
+        <div class="mobile-online-search-panel" role="dialog" aria-label="Search online characters">
+            <header class="mobile-online-search-header">
+                <button type="button" class="mobile-online-search-close" aria-label="Close search">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <h3 class="mobile-online-search-title">Search</h3>
+            </header>
+            <div class="mobile-online-search-modes" role="tablist" hidden>
+                <button type="button" class="mobile-online-search-mode active" data-mode="character" role="tab">
+                    <i class="fa-solid fa-user"></i> Character
+                </button>
+                <button type="button" class="mobile-online-search-mode" data-mode="creator" role="tab">
+                    <i class="fa-solid fa-pen-nib"></i> Creator
+                </button>
+            </div>
+            <form class="mobile-online-search-form">
+                <div class="mobile-online-search-input-wrap">
+                    <i class="fa-solid fa-magnifying-glass mobile-online-search-icon"></i>
+                    <input type="search" class="mobile-online-search-input" placeholder="Search..." autocomplete="off" enterkeyhint="search">
+                    <button type="button" class="mobile-online-search-clear hidden" aria-label="Clear">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <button type="submit" class="mobile-online-search-submit">Search</button>
+            </form>
         </div>
     </div>
 
@@ -2755,8 +2840,8 @@ https://jannyai.com/characters/uuid_slug
     <div id="toastContainer" class="toast-container"></div>
 
     <!-- Scripts -->
-    <script src="library.js?v=99"></script>
-    <script type="module" src="../modules/module-loader.js?v=30"></script>
-    <script src="library-mobile.js?v=4"></script>
+    <script src="library.js?v=101"></script>
+    <script type="module" src="../modules/module-loader.js?v=31"></script>
+    <script src="library-mobile.js?v=8"></script>
 </body>
 </html>

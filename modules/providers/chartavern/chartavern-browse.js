@@ -40,6 +40,7 @@ const {
     cleanupCreatorNotesContainer,
     getProviderExcludeTags,
     renderLoadingState,
+    renderSkeletonGrid,
 } = CoreAPI;
 
 // ========================================
@@ -290,7 +291,7 @@ async function loadCharacters(append = false) {
     const loadMoreBtn = document.getElementById('ctLoadMoreBtn');
 
     if (!append && grid) {
-        renderLoadingState(grid, 'Searching CharacterTavern...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     if (loadMoreBtn) {
@@ -1911,6 +1912,10 @@ class ChartavernBrowseView extends BrowseView {
         if (grid) this.observeImages(grid);
         // Check session silently - if logged in, update toggle and reload with NSFW
         tryCheckSession().then(() => loadCharacters(false));
+    }
+
+    getSearchInputId(mode) {
+        return mode === 'character' ? 'ctSearchInput' : null;
     }
 
     applyDefaults(defaults) {

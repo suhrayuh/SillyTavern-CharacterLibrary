@@ -31,6 +31,7 @@ const {
     apiRequest, cleanupCreatorNotesContainer,
     getProviderExcludeTags,
     renderLoadingState,
+    renderSkeletonGrid,
 } = CoreAPI;
 
 // ========================================
@@ -278,7 +279,7 @@ async function loadCharacters(append = false) {
     const loadMoreBtn = document.getElementById('pygLoadMoreBtn');
 
     if (!append && grid) {
-        renderLoadingState(grid, 'Searching Pygmalion...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     if (loadMoreBtn) {
@@ -1181,7 +1182,7 @@ async function switchPygViewMode(mode) {
 
         const grid = document.getElementById('pygGrid');
         if (grid) {
-            renderLoadingState(grid, 'Loading Pygmalion characters...', 'browse-loading');
+            renderSkeletonGrid(grid);
         }
 
         pygCharacters = [];
@@ -1225,7 +1226,7 @@ async function loadPygFollowingTimeline(forceRefresh = false) {
     }
 
     if (grid) {
-        renderLoadingState(grid, 'Loading timeline...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     let shouldRetry = false;
@@ -2798,6 +2799,10 @@ class PygmalionBrowseView extends BrowseView {
         const grid = document.getElementById('pygGrid');
         if (grid) this.observeImages(grid);
         loadCharacters(false);
+    }
+
+    getSearchInputId(mode) {
+        return mode === 'character' ? 'pygSearchInput' : null;
     }
 
     applyDefaults(defaults) {

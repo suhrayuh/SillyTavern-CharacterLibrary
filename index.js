@@ -368,6 +368,24 @@ function setupPostMessageBridge() {
                 }
                 break;
             }
+            case 'cl-open-chat': {
+                if (!msg.avatar || !msg.chatName) break;
+                hideEmbedded();
+                try {
+                    const context = SillyTavern?.getContext?.();
+                    if (!context) break;
+                    const idx = (context.characters || []).findIndex(c => c.avatar === msg.avatar);
+                    if (idx !== -1 && typeof context.selectCharacterById === 'function') {
+                        await context.selectCharacterById(idx);
+                        if (typeof context.openCharacterChat === 'function') {
+                            await context.openCharacterChat(msg.chatName);
+                        }
+                    }
+                } catch (err) {
+                    console.error(`${EXTENSION_NAME}: Failed to open chat:`, err);
+                }
+                break;
+            }
         }
     });
 }

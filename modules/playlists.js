@@ -304,7 +304,7 @@ function injectPickerModal() {
     pickerInjected = true;
 
     const html = `
-    <div id="playlistPickerModal" class="cl-modal">
+    <div id="playlistPickerModal" class="cl-modal cl-modal-drawer">
         <div class="cl-modal-content" style="max-width: calc(420px * var(--modal-scale, 1));">
             <div class="cl-modal-header">
                 <h3><i class="fa-solid fa-list-ul"></i> Add to Playlist</h3>

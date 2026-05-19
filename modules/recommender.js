@@ -119,14 +119,14 @@ function setOpt(key, value) {
 
 function createModal() {
     const html = `
-    <div id="recommenderModal" class="confirm-modal hidden">
-        <div class="confirm-modal-content recommender-modal-content cl-modal-feature">
-            <div class="confirm-modal-header">
+    <div id="recommenderModal" class="cl-modal">
+        <div class="cl-modal-content recommender-modal-content">
+            <div class="cl-modal-header">
                 <h3>
-                    <i class="fa-solid fa-wand-magic-sparkles cl-modal-header-icon"></i>
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
                     <span>Card Recommender</span>
                 </h3>
-                <button class="close-confirm-btn" id="recommenderCloseBtn" title="Close">
+                <button class="cl-modal-close" id="recommenderCloseBtn" title="Close">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -324,7 +324,7 @@ function openModal() {
     }
     loadSettingsIntoUI();
     clearResults();
-    modal.classList.remove('hidden');
+    modal.classList.add('visible');
     if (!matchMedia('(pointer: coarse)').matches) document.getElementById('recommenderPrompt')?.focus();
     loadProfiles();
 }
@@ -350,7 +350,7 @@ function closeModal() {
 
 function forceCloseModal() {
     abortController?.abort();
-    document.getElementById('recommenderModal')?.classList.add('hidden');
+    document.getElementById('recommenderModal')?.classList.remove('visible');
     _lastPrompt = '';
     _excludedAvatars = new Set();
 }
@@ -649,6 +649,7 @@ function attachEvents() {
         id: 'recommenderModal',
         tier: 5,
         close: () => closeModal(),
+        visible: (el) => el.classList.contains('visible'),
     });
 
     // Enter key to submit

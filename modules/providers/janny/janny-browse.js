@@ -34,6 +34,8 @@ const {
     debounce,
     getProviderExcludeTags,
     renderLoadingState,
+    renderSkeletonGrid,
+    renderEmptyState,
 } = CoreAPI;
 
 // ========================================
@@ -320,7 +322,7 @@ async function loadCharacters(append = false) {
     const loadMoreBtn = document.getElementById('jannyLoadMoreBtn');
 
     if (!append && grid) {
-        renderLoadingState(grid, 'Searching JannyAI...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     if (loadMoreBtn) {
@@ -406,12 +408,21 @@ async function loadCharacters(append = false) {
         renderGrid(jannyCharacters, append);
 
         if (!append && jannyCharacters.length === 0) {
-            grid.innerHTML = `
-                <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);">
-                    <i class="fa-solid fa-search" style="font-size: 2rem; opacity: 0.5;"></i>
-                    <p style="margin-top: 12px;">No characters found</p>
-                </div>
-            `;
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            if (isMobile) {
+                renderEmptyState(grid, {
+                    icon: 'fa-solid fa-ghost',
+                    title: 'No matches on JannyAI',
+                    hint: 'Try a different search term or relax your tag filters. JannyAI search is keyword-based, broad terms tend to surface more results.',
+                });
+            } else {
+                grid.innerHTML = `
+                    <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted);">
+                        <i class="fa-solid fa-search" style="font-size: 2rem; opacity: 0.5;"></i>
+                        <p style="margin-top: 12px;">No characters found</p>
+                    </div>
+                `;
+            }
         }
 
         debugLog('[JannyBrowse] Loaded', hits.length, 'characters, page', jannyCurrentPage, '/', totalPages);
@@ -1477,6 +1488,10 @@ class JannyBrowseView extends BrowseView {
         const grid = document.getElementById('jannyGrid');
         if (grid) this.observeImages(grid);
         loadCharacters(false);
+    }
+
+    getSearchInputId(mode) {
+        return mode === 'character' ? 'jannySearchInput' : null;
     }
 
     applyDefaults(defaults) {

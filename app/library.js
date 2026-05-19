@@ -521,6 +521,10 @@ const DEFAULT_SETTINGS = {
     browseSnapSections: false,
     collapseAllBrowseSections: false,
     mobileProviderQuickSwitch: true,
+    mobileHideBackArrows: false,
+    mobileBrowseQuickImport: true,
+    mobileSwipeGestures: true,
+    mobileHaptics: true,
 
     // ---- Provider Config ----
     chubUseV4Api: false,
@@ -828,6 +832,14 @@ function setSettings(settings) {
     saveGallerySettings();
 }
 
+// Respects mobileHaptics setting and silently no-ops on unsupported devices.
+function hapticFeedback(pattern) {
+    if (getSetting('mobileHaptics') === false) return;
+    if (typeof navigator.vibrate !== 'function') return;
+    try { navigator.vibrate(pattern); } catch { /* unsupported */ }
+}
+window.hapticFeedback = hapticFeedback;
+
 function getProviderExcludeTags(providerId) {
     const map = getSetting('providerExcludeTags') || {};
     const tags = map[providerId];
@@ -962,6 +974,31 @@ function applyHidePlaylistBadges(hidden) {
     document.documentElement.classList.toggle('hide-playlist-badges', !!hidden);
 }
 
+function applyMobileHideBackArrows(hidden) {
+    document.documentElement.classList.toggle('cl-hide-back-arrows', !!hidden);
+}
+
+function applyMobileBrowseQuickImport(enabled) {
+    document.documentElement.classList.toggle('cl-browse-quick-import', !!enabled);
+}
+
+function applyMobileProviderQuickSwitch(enabled) {
+    document.documentElement.classList.toggle('cl-no-provider-quick-switch', !enabled);
+}
+
+function getActiveFilterState() {
+    return {
+        fav: !!document.getElementById('searchFavoritesOnly')?.checked,
+        tag: !!(activeTagFilters && activeTagFilters.size > 0),
+        playlist: !!activePlaylistFilter,
+    };
+}
+
+function updateMobileFilterIndicator() {
+    const s = getActiveFilterState();
+    document.documentElement.classList.toggle('cl-filters-active', s.fav || s.tag || s.playlist);
+}
+
 function updateThemeCustomizerVisibility() {
     const row = document.getElementById('themeCustomizerBtnRow');
     if (!row) return;
@@ -1080,6 +1117,10 @@ function setupSettingsModal() {
     const browseSnapSectionsCheckbox = document.getElementById('settingsBrowseSnapSections');
     const collapseAllBrowseSectionsCheckbox = document.getElementById('settingsCollapseAllBrowseSections');
     const mobileProviderQuickSwitchCheckbox = document.getElementById('settingsMobileProviderQuickSwitch');
+    const mobileHideBackArrowsCheckbox = document.getElementById('settingsMobileHideBackArrows');
+    const mobileBrowseQuickImportCheckbox = document.getElementById('settingsMobileBrowseQuickImport');
+    const mobileSwipeGesturesCheckbox = document.getElementById('settingsMobileSwipeGestures');
+    const mobileHapticsCheckbox = document.getElementById('settingsMobileHaptics');
     
     // Appearance
     const uiScaleSelect = document.getElementById('settingsUiScale');
@@ -1776,6 +1817,18 @@ function setupSettingsModal() {
         if (mobileProviderQuickSwitchCheckbox) {
             mobileProviderQuickSwitchCheckbox.checked = getSetting('mobileProviderQuickSwitch') !== false;
         }
+        if (mobileHideBackArrowsCheckbox) {
+            mobileHideBackArrowsCheckbox.checked = getSetting('mobileHideBackArrows') === true;
+        }
+        if (mobileBrowseQuickImportCheckbox) {
+            mobileBrowseQuickImportCheckbox.checked = getSetting('mobileBrowseQuickImport') !== false;
+        }
+        if (mobileSwipeGesturesCheckbox) {
+            mobileSwipeGesturesCheckbox.checked = getSetting('mobileSwipeGestures') !== false;
+        }
+        if (mobileHapticsCheckbox) {
+            mobileHapticsCheckbox.checked = getSetting('mobileHaptics') !== false;
+        }
         if (themeCustomizerCheckbox) {
             themeCustomizerCheckbox.checked = getSetting('themeCustomizer') || false;
         }
@@ -1839,8 +1892,8 @@ function setupSettingsModal() {
             settingsSearchInput.value = '';
             settingsSearchInput.dispatchEvent(new Event('input'));
         }
-        
-        settingsModal.classList.remove('hidden');
+
+        settingsModal.classList.add('visible');
     };
     
     // Settings sidebar navigation
@@ -1915,7 +1968,7 @@ function setupSettingsModal() {
     }
     
     // Close modal
-    const closeModal = () => settingsModal.classList.add('hidden');
+    const closeModal = () => settingsModal.classList.remove('visible');
     closeSettingsModal.onclick = closeModal;
     settingsModal.onclick = (e) => {
         if (e.target === settingsModal) closeModal();
@@ -2097,6 +2150,10 @@ function setupSettingsModal() {
             browseSnapSections: browseSnapSectionsCheckbox ? browseSnapSectionsCheckbox.checked : false,
             collapseAllBrowseSections: collapseAllBrowseSectionsCheckbox ? collapseAllBrowseSectionsCheckbox.checked : false,
             mobileProviderQuickSwitch: mobileProviderQuickSwitchCheckbox ? mobileProviderQuickSwitchCheckbox.checked : true,
+            mobileHideBackArrows: mobileHideBackArrowsCheckbox ? mobileHideBackArrowsCheckbox.checked : false,
+            mobileBrowseQuickImport: mobileBrowseQuickImportCheckbox ? mobileBrowseQuickImportCheckbox.checked : true,
+            mobileSwipeGestures: mobileSwipeGesturesCheckbox ? mobileSwipeGesturesCheckbox.checked : true,
+            mobileHaptics: mobileHapticsCheckbox ? mobileHapticsCheckbox.checked : true,
             buttonStyle: buttonStyleSelect ? buttonStyleSelect.value || 'glass' : 'glass',
             uiScale: uiScaleSelect ? parseInt(uiScaleSelect.value) || 3 : 3,
             modalSize: modalSizeSelect ? parseInt(modalSizeSelect.value) || 2 : 2,
@@ -2141,6 +2198,15 @@ function setupSettingsModal() {
 
         // Apply hide playlist badges
         applyHidePlaylistBadges(hidePlaylistBadgesCheckbox ? hidePlaylistBadgesCheckbox.checked : false);
+
+        // Mobile back-arrow visibility toggle
+        applyMobileHideBackArrows(mobileHideBackArrowsCheckbox ? mobileHideBackArrowsCheckbox.checked : false);
+
+        // Mobile compact-import on browse preview modals
+        applyMobileBrowseQuickImport(mobileBrowseQuickImportCheckbox ? mobileBrowseQuickImportCheckbox.checked : true);
+
+        // Mobile provider quick-switch (topbar icon + Online dropdown)
+        applyMobileProviderQuickSwitch(mobileProviderQuickSwitchCheckbox ? mobileProviderQuickSwitchCheckbox.checked : true);
 
         // Keep import modal defaults in sync with settings
         syncImportAutoDownloadGallery();
@@ -2278,6 +2344,18 @@ function setupSettingsModal() {
         }
         if (mobileProviderQuickSwitchCheckbox) {
             mobileProviderQuickSwitchCheckbox.checked = DEFAULT_SETTINGS.mobileProviderQuickSwitch;
+        }
+        if (mobileHideBackArrowsCheckbox) {
+            mobileHideBackArrowsCheckbox.checked = DEFAULT_SETTINGS.mobileHideBackArrows;
+        }
+        if (mobileBrowseQuickImportCheckbox) {
+            mobileBrowseQuickImportCheckbox.checked = DEFAULT_SETTINGS.mobileBrowseQuickImport;
+        }
+        if (mobileSwipeGesturesCheckbox) {
+            mobileSwipeGesturesCheckbox.checked = DEFAULT_SETTINGS.mobileSwipeGestures;
+        }
+        if (mobileHapticsCheckbox) {
+            mobileHapticsCheckbox.checked = DEFAULT_SETTINGS.mobileHaptics;
         }
 
         // Provider Order & Defaults - reset to registration order
@@ -2722,7 +2800,7 @@ function setupSettingsModal() {
     if (batchCheckUpdatesBtn) {
         batchCheckUpdatesBtn.onclick = () => {
             if (typeof window.checkAllCardUpdates === 'function') {
-                settingsModal.classList.add('hidden');
+                settingsModal.classList.remove('visible');
                 window.checkAllCardUpdates();
             } else {
                 showToast('Card updates module not loaded', 'error');
@@ -3611,18 +3689,17 @@ function switchView(view) {
             mainSearch.style.pointerEvents = '';
         }
         show('chatsView');
-        // Trigger lazy-load of chats module and initial data fetch
-        window.chatsModule?.loadAllChats?.();
+        // rAF defer so swipe transitions can paint first
+        requestAnimationFrame(() => window.chatsModule?.loadAllChats?.());
     } else if (view === 'online') {
         if (onlineFilters) onlineFilters.style.display = 'flex';
         if (importBtn) importBtn.style.display = 'none';
         if (searchSettings) searchSettings.style.display = 'none';
-        // Hide search area entirely - each provider has its own search
         if (mainSearch) {
             mainSearch.style.display = 'none';
         }
         show('onlineView');
-        activateOnlineProvider();
+        requestAnimationFrame(() => activateOnlineProvider());
     }
 
     // Fire registered callbacks for this view
@@ -3698,6 +3775,89 @@ function renderSimpleEmpty(container, message, className = 'empty-state') {
     if (el) {
         el.innerHTML = `<div class="${className}">${escapeHtml(message)}</div>`;
     }
+}
+
+/**
+ * Skeleton card grid for loading states. Mobile shows shimmer cards;
+ * desktop falls back to the hero spinner so canon UX is unchanged.
+ * Cards inject as direct children of `container` so the parent's grid
+ * layout drives placement (no layout shift when real cards arrive).
+ * @param {HTMLElement|string} container
+ * @param {number} [count=12]
+ * @param {string} [desktopLabel='Loading…'] hero spinner text on desktop
+ */
+function renderSkeletonGrid(container, count = 12, desktopLabel = 'Loading…') {
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (!isMobile) {
+        renderLoadingState(container, desktopLabel, 'browse-loading');
+        return;
+    }
+    const el = typeof container === 'string' ? document.getElementById(container) : container;
+    if (!el) return;
+    const cards = Array.from({ length: count }, () => `
+        <div class="cl-skeleton-card">
+            <div class="cl-skeleton-img"></div>
+            <div class="cl-skeleton-meta">
+                <div class="cl-skeleton-line"></div>
+                <div class="cl-skeleton-line short"></div>
+            </div>
+        </div>
+    `).join('');
+    el.innerHTML = cards;
+}
+
+/**
+ * Rich empty-state UI. Mobile shows icon + headline + hint + CTA; desktop
+ * falls back to renderSimpleEmpty using `desktopText` (or `title`).
+ * @param {HTMLElement|string} container
+ * @param {{icon?:string, title:string, hint?:string, actionLabel?:string,
+ *          onAction?:Function, actionIcon?:string, desktopText?:string}} opts
+ */
+function renderEmptyState(container, opts = {}) {
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (!isMobile) {
+        renderSimpleEmpty(container, opts.desktopText || opts.title || '');
+        return;
+    }
+    const el = typeof container === 'string' ? document.getElementById(container) : container;
+    if (!el) return;
+    const { icon, title, hint, actionLabel, onAction, actionIcon } = opts;
+    const iconClass = icon || 'fa-solid fa-ghost';
+    const actionHtml = (actionLabel && onAction)
+        ? `<button type="button" class="action-btn primary cl-empty-state-action">${actionIcon ? `<i class="${actionIcon}"></i> ` : ''}${escapeHtml(actionLabel)}</button>`
+        : '';
+    el.innerHTML = `
+        <div class="cl-empty-state">
+            <div class="cl-empty-state-icon"><i class="${iconClass}"></i></div>
+            <h3 class="cl-empty-state-title">${escapeHtml(title || '')}</h3>
+            ${hint ? `<p class="cl-empty-state-hint">${escapeHtml(hint)}</p>` : ''}
+            ${actionHtml}
+        </div>
+    `;
+    if (actionLabel && onAction) {
+        el.querySelector('.cl-empty-state-action')?.addEventListener('click', onAction);
+    }
+}
+
+/**
+ * Render a shimmering skeleton list of rows. For chats and other row-based
+ * surfaces.
+ * @param {HTMLElement|string} container
+ * @param {number} count - row count, default 6
+ */
+function renderSkeletonList(container, count = 6) {
+    const el = typeof container === 'string' ? document.getElementById(container) : container;
+    if (!el) return;
+    const rows = Array.from({ length: count }, () => `
+        <div class="cl-skeleton-row">
+            <div class="cl-skeleton-avatar"></div>
+            <div class="cl-skeleton-content">
+                <div class="cl-skeleton-line"></div>
+                <div class="cl-skeleton-line shorter"></div>
+            </div>
+        </div>
+    `).join('');
+    el.innerHTML = `<div class="cl-skeleton-list">${rows}</div>`;
 }
 
 // ========================================
@@ -3986,7 +4146,7 @@ function showDisableGalleryFoldersModal(onConfirm, onCancel) {
     }
     
     const modalHtml = `
-        <div id="disableGalleryFoldersModal" class="confirm-modal">
+        <div id="disableGalleryFoldersModal" class="confirm-modal cl-modal-drawer">
             <div class="confirm-modal-content" style="max-width: calc(500px * var(--modal-scale, 1));">
                     <button class="close-confirm-btn" id="closeDisableGalleryModal">&times;</button>
                 </div>
@@ -4332,7 +4492,7 @@ function showFolderMappingModal() {
     
     // Create modal
     const modal = document.createElement('div');
-    modal.className = 'confirm-modal';
+    modal.className = 'confirm-modal cl-modal-drawer';
     modal.id = 'folderMappingModal';
     modal.innerHTML = `
         <div class="confirm-modal-content" style="max-width: calc(700px * var(--modal-scale, 1)); max-height: calc(80vh * var(--modal-scale, 1));">
@@ -4376,7 +4536,7 @@ function showFolderMappingModal() {
         if (!avatar) return;
         const char = allCharacters.find(c => c.avatar === avatar);
         if (!char) return;
-        openCharModalElevated(char, modal);
+        openCharModalElevated(char);
     });
 
     // Setup copy buttons with fallback for non-secure contexts
@@ -4593,7 +4753,7 @@ async function showOrphanedFoldersModal(initialMode = 'legacy') {
 
     // Create initial modal with loading state
     const modal = document.createElement('div');
-    modal.className = 'confirm-modal';
+    modal.className = 'confirm-modal cl-modal-drawer';
     modal.id = 'orphanedFoldersModal';
     modal.innerHTML = `
         <div class="confirm-modal-content orphaned-folders-modal">
@@ -5344,7 +5504,7 @@ async function showOrphanedFoldersModal(initialMode = 'legacy') {
     function openCharAboveOrphaned(avatar) {
         const char = allCharacters.find(c => c.avatar === avatar);
         if (!char) return;
-        openCharModalElevated(char, document.getElementById('orphanedFoldersModal'));
+        openCharModalElevated(char);
     }
 
     body.addEventListener('click', (e) => {
@@ -6312,7 +6472,9 @@ function setupEmbeddedUI() {
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
-    // Inject embedded mode UI adjustments
+    // Lock view-toggle / bottom-nav until fetchCharacters finishes (eg. user cant tap into Chats mid-load)
+    document.documentElement.classList.add('cl-initial-loading');
+
     if (isEmbedded) {
         setupEmbeddedUI();
     }
@@ -6342,6 +6504,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Apply button style
     applyButtonStyle(getSetting('buttonStyle'));
 
+    applyMobileHideBackArrows(getSetting('mobileHideBackArrows'));
+    applyMobileBrowseQuickImport(getSetting('mobileBrowseQuickImport') !== false);
+    applyMobileProviderQuickSwitch(getSetting('mobileProviderQuickSwitch') !== false);
+
     // Apply collapse-all browse sections preference
     applyCollapseAllBrowseSections(getSetting('collapseAllBrowseSections'));
 
@@ -6364,7 +6530,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Always use API for initial load to get authoritative data from disk.
     // The opener's in-memory character list may be stale if another client
     // (e.g. mobile) imported characters since the opener last refreshed.
-    await fetchCharacters(true);
+    try {
+        await fetchCharacters(true);
+    } finally {
+        // Unlock even on fetch failure so the user isnt stranded
+        document.documentElement.classList.remove('cl-initial-loading');
+    }
     setupEventListeners();
 
     // Apply default filter preset (if any) after the initial render is done.
@@ -7566,7 +7737,32 @@ function renderGrid(chars) {
     if (existingSentinel) existingSentinel.remove();
     
     if (chars.length === 0) {
-        renderSimpleEmpty(grid, 'No characters found');
+        const libraryEmpty = !Array.isArray(allCharacters) || allCharacters.length === 0;
+        if (libraryEmpty) {
+            renderEmptyState(grid, {
+                icon: 'fa-solid fa-user-plus',
+                title: 'Your library is empty',
+                hint: 'Import a character card to get started. Drop a PNG anywhere on this page, paste a URL, or use the Import button.',
+                actionLabel: 'Import a character',
+                actionIcon: 'fa-solid fa-plus',
+                onAction: () => document.getElementById('importBtn')?.click(),
+                desktopText: 'No characters found',
+            });
+        } else {
+            renderEmptyState(grid, {
+                icon: 'fa-solid fa-ghost',
+                title: 'No characters match',
+                hint: 'Try clearing your filters or adjusting the search. Tag and creator filters may be too narrow.',
+                actionLabel: 'Clear filters',
+                actionIcon: 'fa-solid fa-xmark',
+                onAction: () => {
+                    const searchInput = document.getElementById('searchInput');
+                    if (searchInput) { searchInput.value = ''; searchInput.dispatchEvent(new Event('input', { bubbles: true })); }
+                    if (typeof clearAllAdvFilters === 'function') clearAllAdvFilters();
+                },
+                desktopText: 'No characters found',
+            });
+        }
         grid.style.minHeight = '';
         grid.style.paddingTop = '';
         return;
@@ -8782,7 +8978,7 @@ async function showLegacyFolderModal(char) {
     
     // Create modal
     const modal = document.createElement('div');
-    modal.className = 'confirm-modal';
+    modal.className = 'confirm-modal cl-modal-drawer';
     modal.id = 'legacyFolderModal';
     
     const safeLegacyFolder = sanitizeFolderName(legacyInfo.legacyFolder);
@@ -8979,12 +9175,13 @@ async function showLegacyFolderModal(char) {
     });
 }
 
-function openCharModalElevated(char, pinnedModal) {
+function openCharModalElevated(char) {
     const charModal = document.getElementById('charModal');
     if (!charModal) return;
-    // Pin ALL currently-visible confirm-modals at their default z-index so the
-    // body.char-modal-above CSS rule only elevates modals opened AFTER this point
-    const pinnedModals = [...document.querySelectorAll('.confirm-modal:not(.hidden)')];
+    // Pin existing visible modals so char-modal-above only elevates new ones
+    const pinnedModals = [
+        ...document.querySelectorAll('.confirm-modal:not(.hidden), .cl-modal.visible'),
+    ];
     pinnedModals.forEach(m => m.style.setProperty('z-index', '2000', 'important'));
     document.body.classList.add('char-modal-above');
     const restore = () => {
@@ -10483,7 +10680,7 @@ async function showDeleteConfirmation(char) {
     
     // Show modal immediately with a loading placeholder for gallery info
     const deleteModal = document.createElement('div');
-    deleteModal.className = 'confirm-modal';
+    deleteModal.className = 'confirm-modal cl-modal-drawer';
     deleteModal.id = 'deleteConfirmModal';
     deleteModal.innerHTML = `
         <div class="confirm-modal-content" style="max-width: calc(450px * var(--modal-scale, 1));">
@@ -10654,8 +10851,10 @@ async function deleteCharacter(char, deleteChats = false) {
     try {
         const avatar = char.avatar || '';
         const charName = getCharField(char, 'name') || avatar;
-        
+
         debugLog('[Delete] Starting deletion for:', charName, 'avatar:', avatar);
+
+        hapticFeedback([20, 30, 20]);
         
         // Delete character via SillyTavern API
         const response = await apiRequest(ENDPOINTS.CHARACTERS_DELETE, 'POST', {
@@ -11765,10 +11964,12 @@ async function toggleCharacterFavorite(char) {
         showToast('No character selected', 'error');
         return;
     }
-    
+
     const currentFavStatus = isCharacterFavorite(char);
     const newFavStatus = !currentFavStatus;
-    
+
+    hapticFeedback(12);
+
     try {
         // fav lives in data.extensions.fav; full data must be passed through.
         const existingData = char.data || {};
@@ -13713,6 +13914,7 @@ function getAdvFilterRulesForChats() {
 
 // Search and Filter Functionality (Global so it can be called from view switching)
 function performSearch() {
+    updateMobileFilterIndicator();
     const rawQuery = document.getElementById('searchInput').value;
     
     const useName = document.getElementById('searchName').checked;
@@ -14945,12 +15147,12 @@ function renderLorebookEntriesHtml(entries) {
     return entries.map((entry, i) => renderLorebookEntryHtml(entry, i)).join('');
 }
 
-/**
- * Hide a modal by ID
- * @param {string} modalId - Modal element ID
- */
+// Handles both class systems (cl-modal uses .visible, confirm-modal uses .hidden).
 function hideModal(modalId) {
-    document.getElementById(modalId)?.classList.add('hidden');
+    const el = document.getElementById(modalId);
+    if (!el) return;
+    if (el.classList.contains('cl-modal')) el.classList.remove('visible');
+    else el.classList.add('hidden');
 }
 
 // Escape HTML characters
@@ -15465,7 +15667,7 @@ function cancelActiveImport() {
 
 // Open/close import modal
 importBtn?.addEventListener('click', () => {
-    importModal.classList.remove('hidden');
+    importModal.classList.add('visible');
     importUrlsInput.value = '';
     importProgress.classList.add('hidden');
     importLog.innerHTML = '';
@@ -15511,7 +15713,7 @@ closeImportModal?.addEventListener('click', async () => {
         if (!confirmClose) return;
         cancelActiveImport();
     }
-    importModal.classList.add('hidden');
+    importModal.classList.remove('visible');
 });
 
 importModal?.addEventListener('click', async (e) => {
@@ -15529,7 +15731,7 @@ importModal?.addEventListener('click', async (e) => {
         if (!confirmClose) return;
         cancelActiveImport();
     }
-    importModal.classList.add('hidden');
+    importModal.classList.remove('visible');
 });
 
 // ==================== IMPORT SOURCE TOGGLE ====================
@@ -16167,7 +16369,7 @@ function updateLogEntry(entry, message, status) {
 startImportBtn?.addEventListener('click', async () => {
     // If in "Done" / "Cancelled" state, just close the modal
     if (startImportBtn.classList.contains('success') || startImportBtn.classList.contains('cancelled')) {
-        importModal.classList.add('hidden');
+        importModal.classList.remove('visible');
         return;
     }
     
@@ -16789,8 +16991,8 @@ function showImportSummaryModal({ galleryCharacters = [], mediaCharacters = [] }
         progressLabel.textContent = 'Preparing downloads...';
         progressCount.textContent = '0/0';
     }
-    
-    modal.classList.remove('hidden');
+
+    modal.classList.add('visible');
 }
 
 // Import Summary Modal Event Listeners
@@ -17162,8 +17364,8 @@ function openProviderLinkModal(char) {
         if (urlInput) urlInput.value = '';
         if (searchResults) searchResults.innerHTML = '';
     }
-    
-    modal.classList.remove('hidden');
+
+    modal.classList.add('visible');
 }
 
 /**
@@ -17638,7 +17840,7 @@ on('providerLinkVersionsBtn', 'click', () => {
     if (activeChar) {
         // Close the link modal, then switch to the Versions tab
         const linkModal = document.getElementById('providerLinkModal');
-        if (linkModal) linkModal.classList.add('hidden');
+        if (linkModal) linkModal.classList.remove('visible');
         const editVBtn = document.getElementById('editPaneVersionsBtn');
         if (editVBtn) editVBtn.click();
     }
@@ -17701,7 +17903,7 @@ function openBulkAutoLinkModal() {
     
     if (hasResults) {
         // We have existing results - show them
-        modal.classList.remove('hidden');
+        modal.classList.add('visible');
         
         if (bulkAutoLinkScanState.scanComplete || bulkAutoLinkAborted) {
             // Scan was finished or stopped - show results directly
@@ -17755,8 +17957,8 @@ function openBulkAutoLinkModal() {
         document.getElementById('bulkAutoLinkConfidentCount').textContent = '0';
         document.getElementById('bulkAutoLinkUncertainCount').textContent = '0';
         document.getElementById('bulkAutoLinkNoMatchCount').textContent = '0';
-        
-        modal.classList.remove('hidden');
+
+        modal.classList.add('visible');
         
         // Start scanning
         runBulkAutoLinkScan();
@@ -18584,7 +18786,7 @@ async function applyBulkAutoLinks() {
     }
     
     // Close modal
-    document.getElementById('bulkAutoLinkModal').classList.add('hidden');
+    document.getElementById('bulkAutoLinkModal').classList.remove('visible');
     
     // Reset state since we linked characters - they're no longer in the unlinked pool
     bulkAutoLinkResults = { confident: [], uncertain: [], nomatch: [] };
@@ -18606,7 +18808,7 @@ document.getElementById('creatorBtn')?.addEventListener('click', () => window.op
 document.getElementById('closeBulkAutoLinkModal')?.addEventListener('click', () => {
     // Just set abort flag and close - state is preserved for resuming
     bulkAutoLinkAborted = true;
-    document.getElementById('bulkAutoLinkModal').classList.add('hidden');
+    document.getElementById('bulkAutoLinkModal').classList.remove('visible');
 });
 document.getElementById('bulkAutoLinkCancelBtn')?.addEventListener('click', () => {
     // If we're in scanning phase, just stop (let the scan loop show results)
@@ -18614,7 +18816,7 @@ document.getElementById('bulkAutoLinkCancelBtn')?.addEventListener('click', () =
     const resultsPhase = document.getElementById('bulkAutoLinkResults');
     if (resultsPhase && !resultsPhase.classList.contains('hidden')) {
         // Results phase - close modal
-        document.getElementById('bulkAutoLinkModal').classList.add('hidden');
+        document.getElementById('bulkAutoLinkModal').classList.remove('visible');
     } else {
         // Scanning phase - just set abort flag, scan loop will handle showing results
         bulkAutoLinkAborted = true;
@@ -18717,14 +18919,14 @@ function clearHighlights(container) {
 // ==============================================
 
 function openGalleryInfoModal() {
-    document.getElementById('galleryInfoModal').classList.remove('hidden');
+    document.getElementById('galleryInfoModal').classList.add('visible');
 }
 
 document.getElementById('galleryInfoBtn')?.addEventListener('click', openGalleryInfoModal);
 
 function closeGalleryInfoModal() {
     const modal = document.getElementById('galleryInfoModal');
-    modal.classList.add('hidden');
+    modal.classList.remove('visible');
     const searchInput = document.getElementById('helpSearchInput');
     if (searchInput && searchInput.value) {
         searchInput.value = '';
@@ -20273,7 +20475,7 @@ charLocalizeToggle?.addEventListener('change', async () => {
 function closeLocalizeModalHandler() {
     localizeAbortController?.abort();
     localizeAbortController = null;
-    localizeModal.classList.add('hidden');
+    localizeModal.classList.remove('visible');
 }
 closeLocalizeModal?.addEventListener('click', closeLocalizeModalHandler);
 closeLocalizeBtn?.addEventListener('click', closeLocalizeModalHandler);
@@ -20286,7 +20488,7 @@ localizeMediaBtn?.addEventListener('click', async () => {
     }
     
     // Show modal
-    localizeModal.classList.remove('hidden');
+    localizeModal.classList.add('visible');
     localizeStatus.textContent = 'Scanning character...';
     localizeLog.innerHTML = '';
     localizeProgressFill.style.width = '0%';
@@ -20477,7 +20679,7 @@ const BULK_SUMMARY_PAGE_SIZE = 50;
 closeBulkLocalizeModal?.addEventListener('click', () => {
     bulkLocalizeAborted = true;
     bulkLocalizeAbortController?.abort();
-    bulkLocalizeModal.classList.add('hidden');
+    bulkLocalizeModal.classList.remove('visible');
 });
 
 cancelBulkLocalizeBtn?.addEventListener('click', () => {
@@ -20489,11 +20691,11 @@ cancelBulkLocalizeBtn?.addEventListener('click', () => {
 
 // Close summary modal
 closeBulkSummaryModal?.addEventListener('click', () => {
-    bulkSummaryModal.classList.add('hidden');
+    bulkSummaryModal.classList.remove('visible');
 });
 
 closeBulkSummaryBtn?.addEventListener('click', () => {
-    bulkSummaryModal.classList.add('hidden');
+    bulkSummaryModal.classList.remove('visible');
 });
 
 // Summary filter and search handlers
@@ -20560,7 +20762,7 @@ function getFilteredBulkResults() {
  */
 function saveBulkSummaryModalState() {
     const modal = bulkSummaryModal;
-    bulkSummaryModalState.wasOpen = modal && !modal.classList.contains('hidden');
+    bulkSummaryModalState.wasOpen = modal && modal.classList.contains('visible');
     bulkSummaryModalState.scrollPosition = bulkSummaryList ? bulkSummaryList.scrollTop : 0;
     bulkSummaryModalState.currentPage = bulkSummaryCurrentPage;
     bulkSummaryModalState.filterValue = bulkSummaryFilterSelect?.value || 'all';
@@ -20578,7 +20780,7 @@ function restoreBulkSummaryModalState() {
     if (bulkSummarySearch) bulkSummarySearch.value = bulkSummaryModalState.searchValue;
     bulkSummaryCurrentPage = bulkSummaryModalState.currentPage;
     
-    bulkSummaryModal.classList.remove('hidden');
+    bulkSummaryModal.classList.add('visible');
     
     // Re-render and restore scroll position
     renderBulkSummaryList();
@@ -20603,7 +20805,7 @@ function openCharFromBulkSummary(avatar) {
     saveBulkSummaryModalState();
     
     // Hide bulk summary modal
-    bulkSummaryModal.classList.add('hidden');
+    bulkSummaryModal.classList.remove('visible');
     
     // Open character modal
     openModal(char);
@@ -20867,7 +21069,7 @@ function showBulkSummary(wasAborted = false, skippedCompleted = 0) {
     renderBulkSummaryList();
     
     // Show modal
-    bulkSummaryModal.classList.remove('hidden');
+    bulkSummaryModal.classList.add('visible');
 }
 
 /**
@@ -20909,7 +21111,7 @@ async function runBulkLocalization() {
     const completedAvatars = getCompletedMediaLocalizations();
     
     // Reset UI
-    bulkLocalizeModal.classList.remove('hidden');
+    bulkLocalizeModal.classList.add('visible');
     bulkLocalizeCharAvatar.src = '';
     bulkLocalizeCharName.textContent = 'Preparing...';
     bulkLocalizeStatus.textContent = 'Scanning library...';
@@ -21063,7 +21265,7 @@ async function runBulkLocalization() {
     }
     
     // Hide progress modal and show summary
-    bulkLocalizeModal.classList.add('hidden');
+    bulkLocalizeModal.classList.remove('visible');
     showBulkSummary(bulkLocalizeAborted, skippedCompleted);
     
     // Show toast
@@ -21078,7 +21280,7 @@ async function runBulkLocalization() {
 // Bulk Localize button in settings
 document.getElementById('bulkLocalizeBtn')?.addEventListener('click', () => {
     // Close settings modal
-    document.getElementById('gallerySettingsModal')?.classList.add('hidden');
+    document.getElementById('gallerySettingsModal')?.classList.remove('visible');
     
     // Confirm with user
     if (allCharacters.length === 0) {
@@ -23481,8 +23683,8 @@ function toggleDupGroup(idx) {
 function saveDuplicateModalState() {
     const modal = document.getElementById('charDuplicatesModal');
     const resultsEl = document.getElementById('charDuplicatesResults');
-    
-    duplicateModalState.wasOpen = modal && !modal.classList.contains('hidden');
+
+    duplicateModalState.wasOpen = modal && modal.classList.contains('visible');
     duplicateModalState.scrollPosition = resultsEl ? resultsEl.scrollTop : 0;
     
     // Track which groups are expanded
@@ -23501,8 +23703,8 @@ function restoreDuplicateModalState() {
     
     const modal = document.getElementById('charDuplicatesModal');
     const resultsEl = document.getElementById('charDuplicatesResults');
-    
-    modal.classList.remove('hidden');
+
+    modal.classList.add('visible');
     
     // Restore expanded groups
     duplicateModalState.expandedGroups.forEach(idx => {
@@ -23529,7 +23731,7 @@ function viewCharFromDuplicates(avatar) {
     saveDuplicateModalState();
     
     // Hide duplicates modal
-    document.getElementById('charDuplicatesModal').classList.add('hidden');
+    document.getElementById('charDuplicatesModal').classList.remove('visible');
     
     // Open character modal
     openModal(char);
@@ -23572,7 +23774,7 @@ async function deleteDuplicateChar(avatar, groupIdx) {
     
     // Create enhanced delete confirmation modal
     const deleteModal = document.createElement('div');
-    deleteModal.className = 'confirm-modal';
+    deleteModal.className = 'confirm-modal cl-modal-drawer';
     deleteModal.id = 'deleteDuplicateModal';
     
     // Only allow gallery modification when:
@@ -23896,8 +24098,8 @@ async function openCharDuplicatesModal(useCache = true) {
     statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning library for duplicates...';
     statusEl.className = 'char-duplicates-status';
     resultsEl.innerHTML = '';
-    
-    modal.classList.remove('hidden');
+
+    modal.classList.add('visible');
     
     // Run scan (async)
     await new Promise(r => setTimeout(r, 50)); // Let modal render
@@ -24016,9 +24218,9 @@ async function showPreImportDuplicateWarning(newCharInfo, matches) {
         });
         
         matchesEl.innerHTML = matchesHtml;
-        
+
         // Show modal
-        modal.classList.remove('hidden');
+        modal.classList.add('visible');
     });
 }
 
@@ -24026,7 +24228,7 @@ async function showPreImportDuplicateWarning(newCharInfo, matches) {
  * Hide the pre-import modal and resolve with user choice
  */
 function resolvePreImportChoice(choice) {
-    document.getElementById('preImportDuplicateModal').classList.add('hidden');
+    document.getElementById('preImportDuplicateModal').classList.remove('visible');
     
     if (preImportResolveCallback) {
         preImportResolveCallback({
@@ -25321,6 +25523,29 @@ window.registerOverlay?.({ id: 'contentFullscreenModal', tier: 3, static: false,
 window.registerOverlay?.({ id: 'altGreetingsFullscreenModal', tier: 3, static: false, close: (el) => el.remove() });
 window.registerOverlay?.({ id: 'importSummaryModal', tier: 4, close: () => handleImportSummaryCloseRequest() });
 
+// Tier 7 so they close before charModal (tier 8) on back/Escape.
+const _hideClModalVisible = id => () => document.getElementById(id)?.classList.remove('visible');
+window.registerOverlay?.({ id: 'gallerySettingsModal',      tier: 7, close: _hideClModalVisible('gallerySettingsModal') });
+window.registerOverlay?.({ id: 'galleryInfoModal',          tier: 7, close: _hideClModalVisible('galleryInfoModal') });
+window.registerOverlay?.({ id: 'importModal',               tier: 7, close: _hideClModalVisible('importModal') });
+window.registerOverlay?.({ id: 'localizeModal',             tier: 7, close: _hideClModalVisible('localizeModal') });
+window.registerOverlay?.({ id: 'bulkLocalizeModal',         tier: 7, close: _hideClModalVisible('bulkLocalizeModal') });
+window.registerOverlay?.({ id: 'bulkLocalizeSummaryModal',  tier: 7, close: _hideClModalVisible('bulkLocalizeSummaryModal') });
+window.registerOverlay?.({ id: 'bulkAutoLinkModal',         tier: 7, close: _hideClModalVisible('bulkAutoLinkModal') });
+window.registerOverlay?.({ id: 'charDuplicatesModal',       tier: 7, close: _hideClModalVisible('charDuplicatesModal') });
+window.registerOverlay?.({ id: 'preImportDuplicateModal',   tier: 7, close: _hideClModalVisible('preImportDuplicateModal') });
+window.registerOverlay?.({ id: 'providerLinkModal',         tier: 7, close: _hideClModalVisible('providerLinkModal') });
+
+// Static .confirm-modal in HTML (uses .hidden toggle, not .visible).
+window.registerOverlay?.({ id: 'confirmSaveModal', tier: 7, close: (el) => el?.classList.add('hidden') });
+
+// Dynamic confirm-modals (created/removed each invocation; registry entry persists).
+window.registerOverlay?.({ id: 'deleteConfirmModal',  tier: 7, static: false, close: (el) => el?.remove() });
+window.registerOverlay?.({ id: 'deleteDuplicateModal', tier: 7, static: false, close: (el) => el?.remove() });
+window.registerOverlay?.({ id: 'legacyFolderModal',    tier: 7, static: false, close: (el) => el?.remove() });
+window.registerOverlay?.({ id: 'folderMappingModal',   tier: 7, static: false, close: (el) => el?.remove() });
+window.registerOverlay?.({ id: 'orphanedFoldersModal', tier: 7, static: false, close: (el) => el?.remove() });
+
 function openThemeCustomizer() {
     initThemeCustomizer();
     syncCustomizerSliders();
@@ -25401,7 +25626,11 @@ document.addEventListener('keydown', (e) => {
         if (reg.escape === false) continue;
         const el = document.getElementById(reg.id);
         if (!el) continue;
-        const visible = reg.visible ? reg.visible(el) : !el.classList.contains('hidden');
+        const visible = reg.visible
+            ? reg.visible(el)
+            : el.classList.contains('cl-modal')
+                ? el.classList.contains('visible')
+                : !el.classList.contains('hidden');
         if (visible) {
             e.stopPropagation();
             reg.close(el);
@@ -25432,6 +25661,8 @@ window.getActiveChar = function() { return activeChar; };
 window.setActiveChar = function(c) { activeChar = c; };
 window.fetchCharacters = fetchCharacters;
 window.fetchAndAddCharacter = fetchAndAddCharacter;
+window.notifySTCharacterAdded = notifySTCharacterAdded;
+window.notifySTCharacterEdited = notifySTCharacterEdited;
 window.removeCharacterFromList = removeCharacterFromList;
 window.hydrateCharacter = hydrateCharacter;
 window.getTags = getTags;
@@ -25466,6 +25697,11 @@ window.onViewExit = onViewExit;
 
 // DOM / Rendering helpers
 window.renderLoadingState = renderLoadingState;
+window.renderSkeletonGrid = renderSkeletonGrid;
+window.renderSkeletonList = renderSkeletonList;
+window.renderEmptyState = renderEmptyState;
+window.updateMobileFilterIndicator = updateMobileFilterIndicator;
+window.getActiveFilterState = getActiveFilterState;
 window.getCharacterAvatarUrl = getCharacterAvatarUrl;
 window.getListingNameFromExtensions = getListingNameFromExtensions;
 window.getCharacterName = getCharacterName;
@@ -25475,6 +25711,7 @@ window.registerGalleryFolderOverride = registerGalleryFolderOverride;
 window.debugLog = debugLog;
 window.performSearch = performSearch;
 window.toggleFavoritesFilter = toggleFavoritesFilter;
+window.toggleCharacterFavorite = toggleCharacterFavorite;
 window.toggleAdvFilterPanel = toggleAdvFilterPanel;
 window.closeAdvFilterPanel = closeAdvFilterPanel;
 window.evaluateChatAdvancedFilters = evaluateChatAdvancedFilters;
@@ -25495,6 +25732,7 @@ window.isMultiSelectEnabled = isMultiSelectEnabled;
 window.getHostWindow = getHostWindow;
 window.getSTContext = getSTContext;
 window.isEmbedded = isEmbedded;
+window.embeddedShowTopBar = embeddedShowTopBar;
 window.closeEmbeddedPanel = closeEmbeddedPanel;
 
 // Settings

@@ -148,7 +148,7 @@ export function openCharacterModal(char) {
 }
 
 /**
- * Open character detail modal elevated above confirm-modals
+ * Open character detail modal elevated above other open modals (confirm or cl-modal).
  * @param {Object} char - Character object
  */
 export function openCharModalElevated(char) {
@@ -195,6 +195,10 @@ export function setActiveChar(char) {
  */
 export function showToast(message, type = 'info', duration = 3000) {
     window.showToast?.(message, type, duration);
+}
+
+export function hapticFeedback(pattern) {
+    window.hapticFeedback?.(pattern);
 }
 
 /**
@@ -522,6 +526,18 @@ export function renderLoadingState(container, message, className = 'loading-spin
     window.renderLoadingState?.(container, message, className);
 }
 
+export function renderSkeletonGrid(container, count = 12) {
+    window.renderSkeletonGrid?.(container, count);
+}
+
+export function renderSkeletonList(container, count = 6) {
+    window.renderSkeletonList?.(container, count);
+}
+
+export function renderEmptyState(container, opts) {
+    window.renderEmptyState?.(container, opts);
+}
+
 /**
  * Get avatar URL for a character
  * @param {string} avatar - Avatar filename
@@ -602,6 +618,20 @@ export function fetchCharacters(forceRefresh = false) {
  */
 export function fetchAndAddCharacter(avatarFileName) {
     return window.fetchAndAddCharacter?.(avatarFileName) || Promise.resolve(false);
+}
+
+/**
+ * @param {string} avatar
+ */
+export function notifySTCharacterAdded(avatar) {
+    return window.notifySTCharacterAdded?.(avatar);
+}
+
+/**
+ * @param {string} avatar
+ */
+export function notifySTCharacterEdited(avatar) {
+    return window.notifySTCharacterEdited?.(avatar);
 }
 
 /**
@@ -1096,6 +1126,7 @@ export default {
     getActiveChar,
     setActiveChar,
     showToast,
+    hapticFeedback,
     showConfirm,
     refreshCharacters,
     
@@ -1147,6 +1178,9 @@ export default {
     
     // Rendering
     renderLoadingState,
+    renderSkeletonGrid,
+    renderSkeletonList,
+    renderEmptyState,
     getCharacterAvatarUrl,
     getListingNameFromExtensions,
     getCharacterName,
@@ -1158,6 +1192,8 @@ export default {
     deleteCharacter,
     fetchCharacters,
     fetchAndAddCharacter,
+    notifySTCharacterAdded,
+    notifySTCharacterEdited,
     removeCharacterFromList,
     hydrateCharacter,
     performSearch,

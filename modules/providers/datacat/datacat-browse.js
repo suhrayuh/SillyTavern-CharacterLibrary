@@ -55,6 +55,7 @@ const {
     cleanupCreatorNotesContainer,
     getProviderExcludeTags,
     renderLoadingState,
+    renderSkeletonGrid,
 } = CoreAPI;
 
 // Used only for the alt-greeting render below, which is the one site that
@@ -499,7 +500,7 @@ async function loadCharacters(append = false) {
         const loadingSource = isHampterSortMode(datacatSortMode) ? 'JanitorAI (Hampter)'
             : isJannySortMode(datacatSortMode) ? 'JanitorAI (MeiliSearch)'
             : isSaucepanSortMode(datacatSortMode) ? 'Saucepan' : 'DataCat';
-        renderLoadingState(grid, `Loading from ${loadingSource}...`, 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     // Helper to update the loading sub-status line during long-running fetches.
@@ -2223,7 +2224,7 @@ async function loadFollowingCharacters(forceRefresh = false) {
     }
 
     if (grid) {
-        renderLoadingState(grid, 'Loading timeline...', 'browse-loading');
+        renderSkeletonGrid(grid);
     }
 
     try {
@@ -4222,7 +4223,7 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
             this.observeImages(grid);
             // Show spinner immediately so the user doesn't see a blank grid
             // while the async cl-helper / session checks below are in flight.
-            renderLoadingState(grid, 'Loading from DataCat...', 'browse-loading');
+            renderSkeletonGrid(grid);
         }
 
         // Check cl-helper, auto-init session (with persistence), then load
@@ -4256,6 +4257,11 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
                 `;
             }
         });
+    }
+
+    getSearchModes() { return ['character', 'creator']; }
+    getSearchInputId(mode) {
+        return mode === 'creator' ? 'datacatCreatorSearchInput' : 'datacatSearchInput';
     }
 
     applyDefaults(defaults) {
