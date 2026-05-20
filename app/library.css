@@ -96,7 +96,10 @@
 
 /* ========================================
    Modal Size Overrides (body class approach)
-   Small = 0.8x, Large = 1.25x, Medium = default (no class)
+   Small = 0.8x, Medium = 1x (no class), Large = 1.25x, XL = 1.4x
+   XL has no explicit per-modal overrides yet, modals scale via the
+   --modal-scale variable on their base rule. Add explicit XL rules
+   below if a specific modal needs tuning at the larger size.
    ======================================== */
 
 /* --- Small --- */
@@ -318,6 +321,15 @@ body.modal-size-large .cl-modal-content.creator-saveas-diff-content { max-width:
 .custom-select-item.selected {
     color: var(--accent);
     background: rgba(var(--accent-rgb), 0.1);
+}
+
+.custom-select-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.custom-select-item.disabled:hover {
+    background: transparent;
 }
 
 * {

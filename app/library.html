@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="dark">
     <meta name="referrer" content="no-referrer">
     <title>SillyTavern Character Library</title>
-    <link rel="stylesheet" href="library.css?v=82">
+    <link rel="stylesheet" href="library.css?v=85">
     <link rel="stylesheet" href="library-mobile.css?v=12" media="screen and (max-width: 768px)">
     <!-- Noto Sans from SillyTavern's bundled webfonts -->
     <link rel="stylesheet" href="/webfonts/NotoSans/stylesheet.css">
@@ -223,7 +223,7 @@
                             <i class="fa-solid fa-circle-info"></i> Help & Tips
                         </button>
                         <button id="gallerySettingsBtn" class="dropdown-item">
-                            <i class="fa-solid fa-gear"></i> Gallery Settings
+                            <i class="fa-solid fa-gear"></i> Settings
                         </button>
                     </div>
                 </div>
@@ -1725,7 +1725,7 @@ https://jannyai.com/characters/uuid_slug
                                 <li><strong>Card Recommender</strong>: AI-powered character recommendations</li>
                                 <li><strong>Gallery Sync Status</strong>: Audit gallery folder mappings</li>
                                 <li><strong>Help & Tips</strong>: This modal</li>
-                                <li><strong>Gallery Settings</strong>: Configure gallery folders, media localization, and provider settings</li>
+                                <li><strong>Settings</strong>: Configure gallery folders, media localization, and provider settings</li>
                             </ul>
                         </div>
                     </div>
@@ -1806,7 +1806,7 @@ https://jannyai.com/characters/uuid_slug
     <div id="gallerySettingsModal" class="cl-modal">
         <div class="cl-modal-content settings-modal-content settings-with-sidebar">
             <div class="cl-modal-header">
-                <h3><i class="fa-solid fa-gear"></i> Gallery Settings</h3>
+                <h3><i class="fa-solid fa-gear"></i> Settings</h3>
                 <div class="settings-search-bar">
                     <i class="fa-solid fa-search"></i>
                     <input type="search" id="settingsSearchInput" class="glass-input" placeholder="Search..." autocomplete="one-time-code">
@@ -1929,8 +1929,9 @@ https://jannyai.com/characters/uuid_slug
                                     <option value="1" data-icon="fa-solid fa-compress">Small</option>
                                     <option value="2" data-icon="fa-solid fa-expand" selected>Medium (Default)</option>
                                     <option value="3" data-icon="fa-solid fa-up-right-and-down-left-from-center">Large</option>
+                                    <option value="4" data-icon="fa-solid fa-window-maximize">Extra Large</option>
                                 </select>
-                                <span class="settings-hint">Adjust the size of modal dialogs</span>
+                                <span class="settings-hint">Adjust the size of modal dialogs. Extra Large is available only at the smallest UI Scale (80%).</span>
                             </div>
                             <div class="settings-row">
                                 <label for="settingsHighlightColor">Accent Color:</label>
@@ -2839,7 +2840,7 @@ https://jannyai.com/characters/uuid_slug
     <div id="toastContainer" class="toast-container"></div>
 
     <!-- Scripts -->
-    <script src="library.js?v=106"></script>
+    <script src="library.js?v=110"></script>
     <script type="module" src="../modules/module-loader.js?v=31"></script>
     <script src="library-mobile.js?v=8"></script>
 </body>

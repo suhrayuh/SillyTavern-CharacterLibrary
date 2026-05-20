@@ -194,6 +194,12 @@ function initCustomSelect(select) {
         const isSelected = option.value === nativeValueGetter.call(select);
         if (isSelected) item.classList.add('selected');
 
+        if (option.disabled) {
+            item.classList.add('disabled');
+            item.setAttribute('aria-disabled', 'true');
+            if (option.title) item.title = option.title;
+        }
+
         const iconClass = option.dataset.icon;
         const iconUrl = option.dataset.iconUrl;
         let iconHtml = '';
@@ -207,6 +213,7 @@ function initCustomSelect(select) {
 
         item.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (option.disabled) return;
             nativeValueSetter.call(select, option.value);
             select.dispatchEvent(new Event('change', { bubbles: true }));
             syncVisuals();
@@ -947,14 +954,31 @@ function applyUiScale(level) {
     document.body.style.height = zoom !== 1 ? `calc(100vh / ${zoom})` : '';
 }
 
-const MODAL_SIZE_MAP = { 1: 0.8, 2: 1, 3: 1.25 };
+const MODAL_SIZE_MAP = { 1: 0.8, 2: 1, 3: 1.25, 4: 1.4 };
 
 function applyModalSize(level) {
     const scale = MODAL_SIZE_MAP[level] || 1;
     document.body.style.setProperty('--modal-scale', scale);
-    document.body.classList.remove('modal-size-small', 'modal-size-large');
+    document.body.classList.remove('modal-size-small', 'modal-size-large', 'modal-size-xlarge');
     if (level === 1) document.body.classList.add('modal-size-small');
     else if (level === 3) document.body.classList.add('modal-size-large');
+    else if (level === 4) document.body.classList.add('modal-size-xlarge');
+}
+
+// XL only fits at 80% ui scale, grey it out otherwise and downgrade to medium if it was active
+function syncXlModalSizeAvailability() {
+    const sel = document.getElementById('settingsModalSize');
+    const xlOption = sel?.querySelector('option[value="4"]');
+    if (!sel || !xlOption) return;
+    const allow = (parseInt(getSetting('uiScale')) || 3) === 1;
+    xlOption.disabled = !allow;
+    xlOption.title = allow ? '' : 'Available only at the smallest UI Scale (80%)';
+    if (!allow && sel.value === '4') {
+        sel.value = '2';
+        setSetting('modalSize', 2);
+        applyModalSize(2);
+    }
+    sel._customSelect?.refresh();
 }
 
 function applyButtonStyle(style) {
@@ -1842,6 +1866,7 @@ function setupSettingsModal() {
             modalSizeSelect.value = String(getSetting('modalSize') ?? 2);
             if (modalSizeSelect._customSelect) modalSizeSelect._customSelect.refresh();
         }
+        syncXlModalSizeAvailability();
         if (buttonStyleSelect) {
             buttonStyleSelect.value = getSetting('buttonStyle') || 'glass';
             if (buttonStyleSelect._customSelect) buttonStyleSelect._customSelect.refresh();
@@ -2047,6 +2072,7 @@ function setupSettingsModal() {
             const level = parseInt(uiScaleSelect.value) || 3;
             setSetting('uiScale', level);
             applyUiScale(level);
+            syncXlModalSizeAvailability();
         });
     }
 
@@ -6499,6 +6525,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!window.matchMedia('(max-width: 768px)').matches) {
         applyUiScale(getSetting('uiScale'));
         applyModalSize(getSetting('modalSize'));
+        // Self-correct XL if saved alongside a non-80% ui scale.
+        syncXlModalSizeAvailability();
     }
     
     // Apply button style
@@ -7586,10 +7614,7 @@ function setPlaylistFilter(uid) {
     performSearch();
 }
 
-// playlists.js calls this after every add/remove (and after delete). does
-// nothing unless the mutated playlist is the one currently filtering. if the
-// playlist got deleted out from under us, drop the filter so the grid doesnt
-// strand empty against a dead uid.
+// called from playlists.js after add/remove/delete; drops the filter if the playlist got deleted out from under us
 function refreshPlaylistFilterIfActive(uid) {
     if (!activePlaylistFilter || activePlaylistFilter !== uid) return;
     const stillExists = !!window.playlistsGetPlaylist?.(uid);
@@ -8191,6 +8216,15 @@ function createCharacterCard(char) {
         plDiv.appendChild(plIcon);
         card.appendChild(plDiv);
     }
+
+    // always in dom, body.multi-select-mode reveals; real div not pseudo so themers can target it like .favorite-indicator
+    const checkbox = document.createElement('div');
+    checkbox.className = 'char-card-checkbox';
+    checkbox.setAttribute('aria-hidden', 'true');
+    const checkIcon = document.createElement('i');
+    checkIcon.className = 'fa-solid fa-check';
+    checkbox.appendChild(checkIcon);
+    card.appendChild(checkbox);
     
     // Avatar image
     const img = document.createElement('img');
