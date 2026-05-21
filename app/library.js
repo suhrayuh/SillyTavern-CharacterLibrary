@@ -593,6 +593,28 @@ function getSTContext() {
     return null;
 }
 
+// Mirrors STs name-to-url proxy lookup; "None" forced empty to stop shared-entry leak.
+async function resolveProxyForProfile(profile) {
+    try {
+        const response = await apiRequest('/settings/get', 'POST', {});
+        if (!response.ok) return { url: '', password: '' };
+        const data = await response.json();
+        const settings = typeof data.settings === 'string' ? JSON.parse(data.settings) : data.settings;
+        if (!settings) return { url: '', password: '' };
+        const oai = settings.oai_settings || {};
+        const proxies = settings.proxies || oai.proxies || [];
+
+        if (profile) {
+            if (!profile.proxy || profile.proxy === 'None') return { url: '', password: '' };
+            const entry = proxies.find(p => p.name === profile.proxy);
+            return { url: entry?.url || '', password: entry?.password || '' };
+        }
+        return { url: oai.reverse_proxy || '', password: oai.proxy_password || '' };
+    } catch {
+        return { url: '', password: '' };
+    }
+}
+
 // Fire-and-forget; 3s timeout. Active chat panel refreshes only when chid matches.
 async function notifySTCharacterEdited(avatar) {
     if (!avatar) return;
@@ -21875,14 +21897,16 @@ function buildNormalizedCharacterData(fullDataMap) {
         const personality = getCharField(src, 'personality') || '';
         const scenario = getCharField(src, 'scenario') || '';
         const creatorNotes = getCharField(char, 'creator_notes') || '';
-        
+        const mesExample = getCharField(src, 'mes_example') || '';
+        const systemPrompt = getCharField(src, 'system_prompt') || '';
+
         // Pre-extract words for content similarity (expensive operation)
         const getWords = (text) => {
             if (!text || text.length < 50) return null;
             const words = text.toLowerCase().match(/\b\w{3,}\b/g) || [];
             return new Set(words);
         };
-        
+
         return {
             avatar: char.avatar,
             char: char,
@@ -21897,11 +21921,15 @@ function buildNormalizedCharacterData(fullDataMap) {
             personality: personality,
             scenario: scenario,
             creatorNotes: creatorNotes,
+            mesExample: mesExample,
+            systemPrompt: systemPrompt,
             descWords: getWords(description),
             firstMesWords: getWords(firstMes),
             persWords: getWords(personality),
             scenWords: getWords(scenario),
-            creatorNotesWords: getWords(creatorNotes)
+            creatorNotesWords: getWords(creatorNotes),
+            mesExWords: getWords(mesExample),
+            sysPromptWords: getWords(systemPrompt)
         };
     }).filter(Boolean);
 }
@@ -22074,20 +22102,31 @@ function calculateFastSimilarity(normA, normB) {
     let contentIdentical = false;
     let strictIdentical = false;
     if (breakdown.name && breakdown.creator && substantialPairs >= 1) {
+        // asymmetric catches "A has field, B doesnt" which threshold-gated checks used to miss.
+        const has = (t) => !!(t && t.length > 0);
+        const asymmetric = (a, b) => has(a) !== has(b);
+        const wordsMismatch = (wA, wB, tA, tB) => has(tA) && has(tB) && wA && wB && wordSetSimilarity(wA, wB) < 1.0;
+
         contentIdentical = true;
-        if (normA.descWords && normB.descWords && normA.description.length > 50 && normB.description.length > 50 && wordSetSimilarity(normA.descWords, normB.descWords) < 1.0) contentIdentical = false;
-        if (normA.firstMesWords && normB.firstMesWords && normA.firstMes.length > 30 && normB.firstMes.length > 30 && wordSetSimilarity(normA.firstMesWords, normB.firstMesWords) < 1.0) contentIdentical = false;
-        if (normA.persWords && normB.persWords && normA.personality.length > 20 && normB.personality.length > 20 && wordSetSimilarity(normA.persWords, normB.persWords) < 1.0) contentIdentical = false;
-        if (normA.scenWords && normB.scenWords && normA.scenario.length > 20 && normB.scenario.length > 20 && wordSetSimilarity(normA.scenWords, normB.scenWords) < 1.0) contentIdentical = false;
-        if (normA.creatorNotesWords && normB.creatorNotesWords && normA.creatorNotes.length > 50 && normB.creatorNotes.length > 50 && wordSetSimilarity(normA.creatorNotesWords, normB.creatorNotesWords) < 1.0) contentIdentical = false;
+        if (asymmetric(normA.description, normB.description) || wordsMismatch(normA.descWords, normB.descWords, normA.description, normB.description)) contentIdentical = false;
+        if (asymmetric(normA.firstMes, normB.firstMes) || wordsMismatch(normA.firstMesWords, normB.firstMesWords, normA.firstMes, normB.firstMes)) contentIdentical = false;
+        if (asymmetric(normA.personality, normB.personality) || wordsMismatch(normA.persWords, normB.persWords, normA.personality, normB.personality)) contentIdentical = false;
+        if (asymmetric(normA.scenario, normB.scenario) || wordsMismatch(normA.scenWords, normB.scenWords, normA.scenario, normB.scenario)) contentIdentical = false;
+        if (asymmetric(normA.creatorNotes, normB.creatorNotes) || wordsMismatch(normA.creatorNotesWords, normB.creatorNotesWords, normA.creatorNotes, normB.creatorNotes)) contentIdentical = false;
+        if (asymmetric(normA.mesExample, normB.mesExample) || wordsMismatch(normA.mesExWords, normB.mesExWords, normA.mesExample, normB.mesExample)) contentIdentical = false;
+        if (asymmetric(normA.systemPrompt, normB.systemPrompt) || wordsMismatch(normA.sysPromptWords, normB.sysPromptWords, normA.systemPrompt, normB.systemPrompt)) contentIdentical = false;
+
         if (contentIdentical) {
-            const eq = (a, b) => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim();
+            // Exact-mode gate: byte equality only. Any drift bumps token count.
+            const eq = (a, b) => (a || '') === (b || '');
             strictIdentical = true;
-            if (normA.description && normB.description && normA.description.length > 50 && normB.description.length > 50 && !eq(normA.description, normB.description)) strictIdentical = false;
-            if (normA.firstMes && normB.firstMes && normA.firstMes.length > 30 && normB.firstMes.length > 30 && !eq(normA.firstMes, normB.firstMes)) strictIdentical = false;
-            if (normA.personality && normB.personality && normA.personality.length > 20 && normB.personality.length > 20 && !eq(normA.personality, normB.personality)) strictIdentical = false;
-            if (normA.scenario && normB.scenario && normA.scenario.length > 20 && normB.scenario.length > 20 && !eq(normA.scenario, normB.scenario)) strictIdentical = false;
-            if (normA.creatorNotes && normB.creatorNotes && normA.creatorNotes.length > 50 && normB.creatorNotes.length > 50 && !eq(normA.creatorNotes, normB.creatorNotes)) strictIdentical = false;
+            if (!eq(normA.description, normB.description)) strictIdentical = false;
+            if (!eq(normA.firstMes, normB.firstMes)) strictIdentical = false;
+            if (!eq(normA.personality, normB.personality)) strictIdentical = false;
+            if (!eq(normA.scenario, normB.scenario)) strictIdentical = false;
+            if (!eq(normA.creatorNotes, normB.creatorNotes)) strictIdentical = false;
+            if (!eq(normA.mesExample, normB.mesExample)) strictIdentical = false;
+            if (!eq(normA.systemPrompt, normB.systemPrompt)) strictIdentical = false;
         }
     }
     
@@ -22446,18 +22485,34 @@ function calculateCharacterSimilarity(charA, charB) {
     let contentIdentical = false;
     let strictIdentical = false;
     if (breakdown.name && breakdown.creator && substantialPairs >= 1) {
+        const has = (t) => !!(t && t.length > 0);
+        const asymmetric = (a, b) => has(a) !== has(b);
+        const textMismatch = (a, b) => has(a) && has(b) && contentSimilarity(a, b) < 1.0;
+
+        const mesExA = getCharField(charA, 'mes_example') || '';
+        const mesExB = getCharField(charB, 'mes_example') || '';
+        const sysPromptA = getCharField(charA, 'system_prompt') || '';
+        const sysPromptB = getCharField(charB, 'system_prompt') || '';
+
         contentIdentical = true;
-        if (descA && descB && descA.length > 50 && descB.length > 50 && contentSimilarity(descA, descB) < 1.0) contentIdentical = false;
-        if (firstMesA && firstMesB && firstMesA.length > 30 && firstMesB.length > 30 && contentSimilarity(firstMesA, firstMesB) < 1.0) contentIdentical = false;
-        if (persA && persB && persA.length > 20 && persB.length > 20 && contentSimilarity(persA, persB) < 1.0) contentIdentical = false;
-        if (notesA && notesB && notesA.length > 50 && notesB.length > 50 && contentSimilarity(notesA, notesB) < 1.0) contentIdentical = false;
+        if (asymmetric(descA, descB) || textMismatch(descA, descB)) contentIdentical = false;
+        if (asymmetric(firstMesA, firstMesB) || textMismatch(firstMesA, firstMesB)) contentIdentical = false;
+        if (asymmetric(persA, persB) || textMismatch(persA, persB)) contentIdentical = false;
+        if (asymmetric(scenA, scenB) || textMismatch(scenA, scenB)) contentIdentical = false;
+        if (asymmetric(notesA, notesB) || textMismatch(notesA, notesB)) contentIdentical = false;
+        if (asymmetric(mesExA, mesExB) || textMismatch(mesExA, mesExB)) contentIdentical = false;
+        if (asymmetric(sysPromptA, sysPromptB) || textMismatch(sysPromptA, sysPromptB)) contentIdentical = false;
+
         if (contentIdentical) {
-            const eq = (a, b) => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim();
+            const eq = (a, b) => (a || '') === (b || '');
             strictIdentical = true;
-            if (descA && descB && descA.length > 50 && descB.length > 50 && !eq(descA, descB)) strictIdentical = false;
-            if (firstMesA && firstMesB && firstMesA.length > 30 && firstMesB.length > 30 && !eq(firstMesA, firstMesB)) strictIdentical = false;
-            if (persA && persB && persA.length > 20 && persB.length > 20 && !eq(persA, persB)) strictIdentical = false;
-            if (notesA && notesB && notesA.length > 50 && notesB.length > 50 && !eq(notesA, notesB)) strictIdentical = false;
+            if (!eq(descA, descB)) strictIdentical = false;
+            if (!eq(firstMesA, firstMesB)) strictIdentical = false;
+            if (!eq(persA, persB)) strictIdentical = false;
+            if (!eq(scenA, scenB)) strictIdentical = false;
+            if (!eq(notesA, notesB)) strictIdentical = false;
+            if (!eq(mesExA, mesExB)) strictIdentical = false;
+            if (!eq(sysPromptA, sysPromptB)) strictIdentical = false;
         }
     }
     
@@ -23211,8 +23266,8 @@ function compareCharacterDifferences(refChar, dupChar) {
     };
 }
 
-function getDuplicateScoreLabel(score, isContentIdentical = false) {
-    if (isContentIdentical) return 'Identical';
+function getDuplicateScoreLabel(score, isStrictIdentical = false) {
+    if (isStrictIdentical) return 'Identical';
     if (score >= 80) return 'Near-Identical';
     if (score >= 60) return 'Very Similar';
     if (score >= 40) return 'Similar';
@@ -23408,6 +23463,7 @@ async function renderDuplicateGroups(groups) {
         // Pre-compute content identity for each duplicate to inform the header
         const dupResults = [];
         let allContentIdentical = true;
+        let allStrictIdentical = group.duplicates.every(d => d.strictIdentical === true);
 
         group.duplicates.forEach((dup, dupIdx) => {
             const dupChar = dup.char;
@@ -23448,7 +23504,7 @@ async function renderDuplicateGroups(groups) {
             dupResults.push({ dup, dupIdx, dupChar, diffs, allDiffs, identicalCount, differentCount, isContentIdentical });
         });
 
-        const headerLabel = getDuplicateScoreLabel(maxScore, allContentIdentical);
+        const headerLabel = getDuplicateScoreLabel(maxScore, allStrictIdentical);
         
         html += `
             <div class="char-dup-group" id="dup-group-${idx}">
@@ -23489,7 +23545,7 @@ async function renderDuplicateGroups(groups) {
                 }
             }
 
-            const scoreLabel = getDuplicateScoreLabel(dup.score || 0, isContentIdentical);
+            const scoreLabel = getDuplicateScoreLabel(dup.score || 0, dup.strictIdentical === true);
             
             const wsNormalizedCount = allDiffs.filter(d => d.normalizedAway).length;
             
@@ -25801,6 +25857,7 @@ window.isMultiSelectEnabled = isMultiSelectEnabled;
 // Host window / ST context access
 window.getHostWindow = getHostWindow;
 window.getSTContext = getSTContext;
+window.resolveProxyForProfile = resolveProxyForProfile;
 window.isEmbedded = isEmbedded;
 window.embeddedShowTopBar = embeddedShowTopBar;
 window.closeEmbeddedPanel = closeEmbeddedPanel;

@@ -996,6 +996,14 @@ function cleanTextForLLM(raw) {
     return text.trim();
 }
 
+// orphan halves bonk Python-strict encoders downstream (LiteLLM, ai-horde, etc).
+function stripOrphanSurrogates(str) {
+    if (!str) return str;
+    return str
+        .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+        .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
 const PROVIDER_TAGLINE_KEYS = ['chub', 'chartavern', 'jannyai', 'pygmalion', 'wyvern'];
 
 function getProviderTagline(char) {
@@ -1189,16 +1197,20 @@ async function callSillyTavernAPI(messages, temperature, signal) {
             body.minimax_endpoint = profile['api-url'];
         }
         if (profile['prompt-post-processing']) body.custom_prompt_post_processing = profile['prompt-post-processing'];
-    } else if (activePreset) {
-        if (activePreset.custom_url) body.custom_url = activePreset.custom_url;
-        if (activePreset.reverse_proxy) body.reverse_proxy = activePreset.reverse_proxy;
-        if (activePreset.proxy_password) body.proxy_password = activePreset.proxy_password;
+    } else if (activePreset && activePreset.custom_url) {
+        body.custom_url = activePreset.custom_url;
     }
+
+    const proxy = await CoreAPI.resolveProxyForProfile(profile);
+    if (proxy?.url) body.reverse_proxy = proxy.url;
+    if (proxy?.password) body.proxy_password = proxy.password;
 
     CoreAPI.debugLog('[Recommender] ST request:', {
         source, model, temperature,
         profileName: profile?.name, hasSecretId: !!body.secret_id,
         customUrl: body.custom_url || null,
+        reverseProxy: body.reverse_proxy || null,
+        hasProxyPassword: !!body.proxy_password,
         messageCount: messages.length, userMsgLength: messages[1]?.content?.length,
     });
 
@@ -1309,12 +1321,12 @@ function extractContent(data) {
 
 async function generate(userPrompt, chars, opts, signal) {
     const charList = buildCharacterList(chars, opts);
+    const userMessage = stripOrphanSurrogates(
+        `CHARACTER LIBRARY (${chars.length} characters):\n${charList}\n\nUSER REQUEST: ${userPrompt}\n\nRecommend up to ${opts.maxResults} characters. Respond with a JSON array only.`
+    );
     const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
-        {
-            role: 'user',
-            content: `CHARACTER LIBRARY (${chars.length} characters):\n${charList}\n\nUSER REQUEST: ${userPrompt}\n\nRecommend up to ${opts.maxResults} characters. Respond with a JSON array only.`
-        },
+        { role: 'user', content: userMessage },
     ];
 
     const mode = getOpt('apiMode');

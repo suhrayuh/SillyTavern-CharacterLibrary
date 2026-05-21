@@ -22,6 +22,10 @@ export function closeEmbeddedPanel() {
     return window.closeEmbeddedPanel?.();
 }
 
+export function resolveProxyForProfile(profile) {
+    return window.resolveProxyForProfile?.(profile);
+}
+
 // ========================================
 // STATE ACCESS
 // ========================================
@@ -1289,4 +1293,5 @@ export default {
     getSTContext,
     getIsEmbedded,
     closeEmbeddedPanel,
+    resolveProxyForProfile,
 };

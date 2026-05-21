@@ -583,15 +583,19 @@ async function callSillyTavernAPI(messages, signal) {
             body.minimax_endpoint = profile['api-url'];
         }
         if (profile['prompt-post-processing']) body.custom_prompt_post_processing = profile['prompt-post-processing'];
-    } else if (activePreset) {
-        if (activePreset.custom_url) body.custom_url = activePreset.custom_url;
-        if (activePreset.reverse_proxy) body.reverse_proxy = activePreset.reverse_proxy;
-        if (activePreset.proxy_password) body.proxy_password = activePreset.proxy_password;
+    } else if (activePreset && activePreset.custom_url) {
+        body.custom_url = activePreset.custom_url;
     }
+
+    const proxy = await CoreAPI.resolveProxyForProfile(profile);
+    if (proxy?.url) body.reverse_proxy = proxy.url;
+    if (proxy?.password) body.proxy_password = proxy.password;
 
     CoreAPI.debugLog?.('[CSSAssistant] Sending request:', {
         source: body.chat_completion_source, model: body.model,
         customUrl: body.custom_url || null,
+        reverseProxy: body.reverse_proxy || null,
+        hasProxyPassword: !!body.proxy_password,
         hasSecretId: !!body.secret_id, profileName: profile?.name,
         messageCount: messages.length,
     });
