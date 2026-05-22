@@ -1304,19 +1304,24 @@ function extractContent(data) {
     }
 
     const msg = data?.choices?.[0]?.message;
-    if (msg && 'content' in msg) return msg.content ?? '';
-    if (data?.choices?.[0]?.text != null) return data.choices[0].text;
+    if (msg && typeof msg.content === 'string') return msg.content;
+    if (msg && 'content' in msg && msg.content == null) return '';
+    const msgBlocks = CoreAPI.flattenContentBlocks(msg?.content);
+    if (msgBlocks) return msgBlocks;
+    if (typeof data?.choices?.[0]?.text === 'string') return data.choices[0].text;
     const delta = data?.choices?.[0]?.delta;
-    if (delta && 'content' in delta) return delta.content ?? '';
-    if (data?.message && 'content' in data.message) return data.message.content ?? '';
+    if (delta && typeof delta.content === 'string') return delta.content;
+    if (typeof data?.message?.content === 'string') return data.message.content;
     if (typeof data?.content === 'string') return data.content;
+    const rootBlocks = CoreAPI.flattenContentBlocks(data?.content);
+    if (rootBlocks) return rootBlocks;
     if (typeof data?.response === 'string') return data.response;
     if (typeof data?.output?.text === 'string') return data.output.text;
     if (typeof data?.result === 'string') return data.result;
     if (typeof data === 'string') return data;
 
     CoreAPI.debugLog('[Recommender] Unrecognized response shape:', JSON.stringify(data).slice(0, 500));
-    throw new Error('Unexpected API response format — could not extract content');
+    throw new Error('Unexpected API response format: could not extract content');
 }
 
 async function generate(userPrompt, chars, opts, signal) {

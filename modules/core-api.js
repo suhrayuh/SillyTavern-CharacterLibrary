@@ -26,6 +26,10 @@ export function resolveProxyForProfile(profile) {
     return window.resolveProxyForProfile?.(profile);
 }
 
+export function flattenContentBlocks(blocks) {
+    return window.flattenContentBlocks?.(blocks) ?? '';
+}
+
 // ========================================
 // STATE ACCESS
 // ========================================
@@ -1294,4 +1298,5 @@ export default {
     getIsEmbedded,
     closeEmbeddedPanel,
     resolveProxyForProfile,
+    flattenContentBlocks,
 };

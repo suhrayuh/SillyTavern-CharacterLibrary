@@ -2755,10 +2755,30 @@ function studioStopGeneration() {
 }
 
 function extractContent(data) {
-    if (typeof data === 'string') return data.trim();
-    if (data?.choices?.[0]?.message?.content) return data.choices[0].message.content.trim();
-    if (data?.content) return data.content.trim();
-    return JSON.stringify(data);
+    if (data?.error) {
+        const msg = typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error));
+        throw new Error(`API error: ${msg.slice(0, 300)}`);
+    }
+
+    const msg = data?.choices?.[0]?.message;
+    if (msg && typeof msg.content === 'string') return msg.content;
+    if (msg && 'content' in msg && msg.content == null) return '';
+    const msgBlocks = CoreAPI.flattenContentBlocks(msg?.content);
+    if (msgBlocks) return msgBlocks;
+    if (typeof data?.choices?.[0]?.text === 'string') return data.choices[0].text;
+    const delta = data?.choices?.[0]?.delta;
+    if (delta && typeof delta.content === 'string') return delta.content;
+    if (typeof data?.message?.content === 'string') return data.message.content;
+    if (typeof data?.content === 'string') return data.content;
+    const rootBlocks = CoreAPI.flattenContentBlocks(data?.content);
+    if (rootBlocks) return rootBlocks;
+    if (typeof data?.response === 'string') return data.response;
+    if (typeof data?.output?.text === 'string') return data.output.text;
+    if (typeof data?.result === 'string') return data.result;
+    if (typeof data === 'string') return data;
+
+    CoreAPI.debugLog?.('[CharCreator] Unrecognized response shape:', JSON.stringify(data).slice(0, 500));
+    throw new Error('Unexpected API response format');
 }
 
 

@@ -615,6 +615,15 @@ async function resolveProxyForProfile(profile) {
     }
 }
 
+// Anthropic-format responses use content blocks: [{type, text}, ...] instead of a string.
+function flattenContentBlocks(blocks) {
+    if (!Array.isArray(blocks)) return '';
+    return blocks
+        .filter(b => b?.type === 'text' && typeof b?.text === 'string')
+        .map(b => b.text)
+        .join('');
+}
+
 // Fire-and-forget; 3s timeout. Active chat panel refreshes only when chid matches.
 async function notifySTCharacterEdited(avatar) {
     if (!avatar) return;
@@ -25858,6 +25867,7 @@ window.isMultiSelectEnabled = isMultiSelectEnabled;
 window.getHostWindow = getHostWindow;
 window.getSTContext = getSTContext;
 window.resolveProxyForProfile = resolveProxyForProfile;
+window.flattenContentBlocks = flattenContentBlocks;
 window.isEmbedded = isEmbedded;
 window.embeddedShowTopBar = embeddedShowTopBar;
 window.closeEmbeddedPanel = closeEmbeddedPanel;
