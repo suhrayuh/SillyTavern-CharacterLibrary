@@ -8349,6 +8349,16 @@ function setupCharacterGridDelegates() {
         openModal(char);
     });
 
+    // Preload the full avatar on mousedown so the modal-open path finds it cached. Only matters when grid uses thumbs; otherwise the browser dedupes.
+    grid.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        if (document.body.classList.contains('multi-select-mode')) return;
+        const card = e.target.closest('.char-card');
+        if (!card || !grid.contains(card)) return;
+        const avatar = card.dataset.avatar;
+        if (avatar) new Image().src = getCharacterAvatarUrl(avatar);
+    });
+
     grid.addEventListener('load', (e) => {
         if (e.target.classList.contains('card-image')) {
             e.target.closest('.char-card')?.classList.add('loaded');
@@ -9555,6 +9565,9 @@ async function openModal(char) {
     // Show loading state for avatar while new image loads
     const modalImg = document.getElementById('modalImage');
     modalImg.classList.add('loading');
+
+    // Race the full-avatar fetch with hydrate so when grid uses thumbs we dont serialize the two network waits.
+    new Image().src = getCharacterAvatarUrl(char.avatar);
 
     // Fetch heavy fields on demand (slim index keeps only grid/search data in memory)
     await hydrateCharacter(char);

@@ -2714,7 +2714,8 @@
         height: 100%;
         object-fit: cover;
     }
-    .card-overlay { padding: 6px 5px 5px; }
+    /* Drop the desktop overdraw: UI Scale (the trigger for the zoom-subpixel bug) is desktop-only. */
+    .card-overlay { padding: 6px 5px 5px; bottom: 0; }
     .card-name {
         font-size: var(--font-xs);
         margin-bottom: 2px;

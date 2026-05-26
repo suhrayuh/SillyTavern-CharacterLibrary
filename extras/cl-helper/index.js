@@ -337,9 +337,7 @@ function registerThumbnailRoutes(router) {
         try {
             await _thumbSemaphore();
             const image = await _Jimp.read(originalPath);
-            // Cover to exact 2:3 (matches .char-card aspect-ratio). With matching aspect,
-            // object-fit: cover is a no-op so subpixel rounding can't expose a gap below
-            // the image when the card height lands on a fractional pixel boundary.
+            // Match .char-card aspect (2:3) so browser object-fit: cover is a no-op and doesnt double-crop.
             image.cover({ w: size, h: Math.round(size * 1.5) });
             const buffer = await image.getBuffer('image/jpeg', { quality: THUMB_QUALITY, jpegColorSpace: 'ycbcr' });
             _thumbRelease();
