@@ -1224,6 +1224,17 @@ https://jannyai.com/characters/uuid_slug
                             </ul>
                         </div>
                         <div class="info-section">
+                            <h4><i class="fa-solid fa-arrows-left-right"></i> Prev/Next Navigation</h4>
+                            <p>Cycle through your characters without returning to the grid:</p>
+                            <ul>
+                                <li><strong>Desktop:</strong> chevron buttons appear on the left and right sides of the open detail modal. Click to step to the previous or next character</li>
+                                <li><strong>Mobile:</strong> swipe left/right on the detail modal header (the avatar / name area). The tab-swipe inside the modal body is left untouched</li>
+                                <li>Order follows your <strong>current sort and filter view</strong>: if you're sorted by Newest with a tag filter active, prev/next walks that filtered, sorted list</li>
+                                <li>If you have unsaved edits in the Edit tab, you'll get a confirm prompt before swapping to a different character</li>
+                                <li>Toggle the whole feature in <strong>Settings &rarr; Character Library &rarr; Card Grid &amp; Browse &rarr; Prev/Next navigation in character details</strong> (on by default)</li>
+                            </ul>
+                        </div>
+                        <div class="info-section">
                             <h4><i class="fa-solid fa-mouse"></i> Context Menu</h4>
                             <p><strong>Right-click</strong> any character card (or <strong>long-press</strong> on mobile) for quick actions:</p>
                             <ul>
@@ -1237,10 +1248,15 @@ https://jannyai.com/characters/uuid_slug
                             <h4><i class="fa-solid fa-mobile-screen"></i> Mobile Tips</h4>
                             <ul>
                                 <li><strong>Tap the avatar</strong> in the detail modal header for a full-size quick-view</li>
-                                <li><strong>Swipe left/right</strong> on character details to switch between tabs</li>
+                                <li><strong>Swipe left/right on the detail modal header</strong> to step to the previous or next character in the current sort + filter view (toggleable in Settings, Card Grid &amp; Browse)</li>
+                                <li><strong>Swipe left/right on character details</strong> to switch between tabs</li>
                                 <li><strong>Swipe left/right</strong> to cycle through alternate greetings</li>
                                 <li><strong>Long-press</strong> a character card to open the context menu (bottom sheet)</li>
-                                <li><strong>Swipe left/right</strong> on the main screen to switch views (Characters ↔ Chats ↔ Online)</li>
+                                <li><strong>Swipe right on a card</strong> to toggle favorite, <strong>swipe left</strong> to open the context menu. The outer 12% per side and bottom 25% of each card are dead zones, so view-swipe and tab-swipe gestures starting near card edges aren't hijacked</li>
+                                <li><strong>Swipe left/right on the main screen</strong> to switch views (Characters ↔ Chats ↔ Online)</li>
+                                <li><strong>Tap-to-scroll long titles</strong>: tap a long character name in the detail modal header, or a long chat title in the chat preview header, to scroll through the full text. Tap again to reset</li>
+                                <li><strong>Mobile search overlay</strong>: opens at the bottom of the screen above the bottom nav when the keyboard is closed, and lifts above the keyboard when it opens, so the whole flow stays in the thumb zone</li>
+                                <li><strong>Android back button</strong>: closes the topmost open overlay (gallery viewer, confirm dialog, detail modal, etc.) before exiting the app</li>
                             </ul>
                         </div>
                     </div>
@@ -1373,6 +1389,14 @@ https://jannyai.com/characters/uuid_slug
                                 <li>Results are categorized: <strong>Confident</strong> (strong match, auto-selected), <strong>Uncertain</strong> (multiple matches, you pick), and <strong>No Match</strong></li>
                                 <li>Review all matches before applying. Nothing is saved until you confirm</li>
                                 <li>The scan is resumable: stop and resume later, or close and reopen without losing progress</li>
+                            </ul>
+                            <p><strong>Live status display</strong> while the scan runs:</p>
+                            <ul>
+                                <li>The avatar and name of the character currently being scanned</li>
+                                <li>A status line describing the current step (querying providers, comparing matches, etc.)</li>
+                                <li><strong>Progress counter</strong> (e.g. <code>147/892</code>) and a progress fill bar showing scan completion</li>
+                                <li>Running totals updated in real time: <strong>confident</strong>, <strong>need review</strong>, and <strong>no match</strong> counts</li>
+                                <li>Once the scan finishes, the same counts double as tabs to filter the results list</li>
                             </ul>
                         </div>
                         <div class="info-section">
@@ -1511,6 +1535,28 @@ https://jannyai.com/characters/uuid_slug
                     <!-- Media & Gallery -->
                     <div class="help-panel" data-section="media">
                         <div class="info-section">
+                            <h4><i class="fa-solid fa-image"></i> Grid Card Thumbnails</h4>
+                            <p>Cut decode cost and bandwidth on the characters grid by serving smaller, pre-resized images for the grid cards. Detail modal, gallery, and full-screen viewer always keep full resolution.</p>
+                            <ul>
+                                <li>Enable in <strong>Settings &rarr; Character Library &rarr; Grid Card Thumbnails &rarr; Use thumbnails in characters view</strong></li>
+                                <li>Applies to <strong>mobile-sized viewports only</strong> by default. Toggle <strong>"Also use on desktop"</strong> to extend coverage</li>
+                                <li>Two backends:
+                                    <ul>
+                                        <li><strong>cl-helper</strong> (recommended): resizes via jimp and caches each thumbnail on disk at the size you pick (384 / 512 / 640 / 768px wide). 512 is a good baseline. Requires the cl-helper plugin installed</li>
+                                        <li><strong>ST's built-in /thumbnail</strong>: fixed at 96x144, which looks blurry on high-DPR phones. Used automatically if cl-helper isn't available or you turn the cl-helper option off</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Cache management</strong> (cl-helper backend, in the same settings group):
+                                    <ul>
+                                        <li><strong>Populate at current size</strong>: pre-generates a thumbnail for every character at the size selected above. Already-cached entries are skipped. Useful after a bulk import or after changing the size</li>
+                                        <li><strong>Purge cache</strong>: deletes every cached thumbnail (any size). Next scroll regenerates on demand</li>
+                                        <li>Live cache stats (count + on-disk size) update under the buttons</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                            <p class="info-tip"><i class="fa-solid fa-lightbulb"></i> Biggest win: mobile decode cost drops sharply on fast-scroll, and large libraries on slow connections feel snappier. On desktop with plenty of decode budget, the win is mostly bandwidth.</p>
+                        </div>
+                        <div class="info-section">
                             <h4><i class="fa-solid fa-expand"></i> Gallery Viewer</h4>
                             <p>Full-screen media viewer for character gallery images, GIFs, and videos:</p>
                             <ul>
@@ -1552,6 +1598,7 @@ https://jannyai.com/characters/uuid_slug
                                 <li><strong>Mega.nz</strong>: public folder shares with multi-pass folder traversal</li>
                                 <li><strong>Imgur, PostImg, ImgBB, Imgbox</strong>: albums and individual images</li>
                                 <li><strong>Catbox</strong>: direct file URLs</li>
+                                <li><strong>Dropbox</strong>: shared folders and individual file links</li>
                                 <li><strong>Google Drive</strong>: shared folders and individual files</li>
                             </ul>
                             <p>Extractors run automatically when you trigger <strong>Download Embedded Media</strong> from the Gallery tab or use Bulk Localization. No configuration is required for public content.</p>
@@ -2758,7 +2805,7 @@ https://jannyai.com/characters/uuid_slug
                         <div class="settings-group">
                             <div class="settings-group-title"><i class="fa-solid fa-info-circle"></i> Version Info</div>
                             <div class="settings-row">
-                                <span class="settings-hint" style="font-family: monospace;">Character Library v5.3.0</span>
+                                <span class="settings-hint" style="font-family: monospace;">Character Library v6.0.0</span>
                             </div>
                         </div>
 
