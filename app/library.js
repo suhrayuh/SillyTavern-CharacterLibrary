@@ -1654,33 +1654,14 @@ function setupSettingsModal() {
                 const prov = viewProviders.find(p => p.id === pid);
 
                 if (isCurrentlyDisabled && prov?.enableWarning) {
-                    const modal = document.createElement('div');
-                    modal.className = 'confirm-modal';
-                    modal.innerHTML = `
-                        <div class="confirm-modal-content" style="max-width: calc(450px * var(--modal-scale, 1));">
-                            <div class="confirm-modal-header">
-                                <h3><i class="fa-solid fa-triangle-exclamation" style="color: var(--accent);"></i> Enable ${prov.name}?</h3>
-                                <button class="close-confirm-btn" data-action="cancel">&times;</button>
-                            </div>
-                            <div class="confirm-modal-body">
-                                <p>${prov.enableWarning}</p>
-                            </div>
-                            <div class="confirm-modal-footer">
-                                <button class="action-btn secondary" data-action="cancel">Cancel</button>
-                                <button class="action-btn primary" data-action="confirm"><i class="fa-solid fa-check"></i> Enable</button>
-                            </div>
-                        </div>
-                    `;
-                    document.body.appendChild(modal);
-                    modal.addEventListener('click', (e) => {
-                        const action = e.target.closest('[data-action]')?.dataset.action;
-                        if (action === 'confirm') {
-                            applyProviderToggle(btn, false);
-                            modal.remove();
-                        } else if (action === 'cancel') {
-                            modal.remove();
-                        }
-                    });
+                    // Canonical confirm: stacks above the settings cl-modal (a raw .confirm-modal sits
+                    // below it) and gets Escape / Android back handling from the overlay registry.
+                    showConfirm({
+                        title: `Enable ${prov.name}?`,
+                        message: prov.enableWarning,
+                        icon: 'fa-solid fa-triangle-exclamation',
+                        confirmLabel: 'Enable',
+                    }).then(ok => { if (ok) applyProviderToggle(btn, false); });
                     return;
                 }
 
