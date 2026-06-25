@@ -251,9 +251,9 @@ window.registerOverlay = window.registerOverlay || function(cfg) {
 (function MobileEnhancements() {
     'use strict';
 
-    // Only run on mobile viewports
+    // Only run on mobile viewports (extended to 900px for iPad support)
     function isMobile() {
-        return window.matchMedia('(max-width: 768px)').matches;
+        return window.matchMedia('(max-width: 900px)').matches;
     }
 
     // Shared signal: card-swipe sets this true when it commits to a horizontal
@@ -334,10 +334,10 @@ window.registerOverlay = window.registerOverlay || function(cfg) {
         init();
     }
 
-    // Live breakpoint crossing: re-init in the correct mode when the viewport crosses 768px. Debounced
+    // Live breakpoint crossing: re-init in the correct mode when the viewport crosses 900px. Debounced
     // so dragging a window across the boundary doesn't thrash. teardown fully reverses the layer, so a
     // desktop session is clean and a re-entry to mobile rebuilds from scratch.
-    const mq = window.matchMedia('(max-width: 768px)');
+    const mq = window.matchMedia('(max-width: 900px)');
     let crossTimer = 0;
     function onBreakpointChange() {
         clearTimeout(crossTimer);
@@ -4116,7 +4116,7 @@ window.registerOverlay = window.registerOverlay || function(cfg) {
         function attachObserver(menuEl) {
             const obs = new MutationObserver(() => {
                 // Check viewport at event time: this observer can outlive a cross to desktop and must no-op there.
-                if (!window.matchMedia('(max-width: 768px)').matches) return;
+                if (!window.matchMedia('(max-width: 900px)').matches) return;
                 if (menuEl.classList.contains('visible')) {
                     menuEl.classList.remove('visible');
                     showCtxSheet(menuEl);

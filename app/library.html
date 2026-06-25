@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <title>SillyTavern Character Library</title>
     <link rel="stylesheet" href="library.css?v=104">
-    <link rel="stylesheet" href="library-mobile.css?v=33" media="screen and (max-width: 768px)">
+    <link rel="stylesheet" href="library-mobile.css?v=33" media="screen and (max-width: 900px)">
     <!-- Noto Sans from SillyTavern's bundled webfonts -->
     <link rel="stylesheet" href="/webfonts/NotoSans/stylesheet.css">
     <!-- Font Awesome for Icons -->
@@ -34,7 +34,7 @@
                 if (/iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
                     document.documentElement.classList.add('cl-ios');
                 }
-                if (window.matchMedia('(max-width: 768px)').matches) return;
+                if (window.matchMedia('(max-width: 900px)').matches) return;
                 var raw = localStorage.getItem('SillyTavernCharacterGallery');
                 if (!raw) return;
                 var s = JSON.parse(raw);

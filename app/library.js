@@ -320,7 +320,7 @@ function initCustomSelect(select) {
     trigger.addEventListener('click', (e) => {
         e.stopPropagation();
         // Decided at click time, not attach time, so a live breakpoint cross switches sheet/menu.
-        if (window.matchMedia('(max-width: 768px)').matches) {
+        if (window.matchMedia('(max-width: 900px)').matches) {
             window.openSelectorSheetFromSelect?.(select);
             return;
         }
@@ -4612,7 +4612,7 @@ function renderSimpleEmpty(container, message, className = 'empty-state') {
  * @param {string} [desktopLabel='Loading…'] hero spinner text on desktop
  */
 function renderSkeletonGrid(container, count = 12, desktopLabel = 'Loading…') {
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const isMobile = window.matchMedia('(max-width: 900px)').matches;
     if (!isMobile) {
         renderLoadingState(container, desktopLabel, 'browse-loading');
         return;
@@ -4639,7 +4639,7 @@ function renderSkeletonGrid(container, count = 12, desktopLabel = 'Loading…') 
  *          onAction?:Function, actionIcon?:string, desktopText?:string}} opts
  */
 function renderEmptyState(container, opts = {}) {
-    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const isMobile = window.matchMedia('(max-width: 900px)').matches;
     if (!isMobile) {
         renderSimpleEmpty(container, opts.desktopText || opts.title || '');
         return;
@@ -7032,15 +7032,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyHighlightColor(getSetting('highlightColor'));
 
     // Apply UI scale (desktop only)
-    if (!window.matchMedia('(max-width: 768px)').matches) {
+    if (!window.matchMedia('(max-width: 900px)').matches) {
         applyUiScale(getSetting('uiScale'));
         applyModalSize(getSetting('modalSize'));
         // Self-correct XL if saved alongside a non-80% ui scale.
         syncXlModalSizeAvailability();
     }
     // Re-apply on a live breakpoint cross: UI scale + modal size are desktop-only chrome (mobile runs
-    // unzoomed), so a session that loaded on one side of 768px would keep the wrong chrome after crossing.
-    const uiScaleMq = window.matchMedia('(max-width: 768px)');
+    // unzoomed), so a session that loaded on one side of 900px would keep the wrong chrome after crossing.
+    const uiScaleMq = window.matchMedia('(max-width: 900px)');
     function applyViewportChrome() {
         if (uiScaleMq.matches) {
             document.body.style.zoom = '';
@@ -8532,7 +8532,7 @@ function updateVisibleCards(grid, scrollContainer, force = false) {
     
     const { cols, cardHeight, gap } = getGridMetrics(gridWidth);
     
-    const _isMobileMetrics = window.matchMedia?.('(max-width: 768px)').matches;
+    const _isMobileMetrics = window.matchMedia?.('(max-width: 900px)').matches;
     const RENDER_BUFFER_PX = clientHeight * 2.5;
     const PRELOAD_BUFFER_PX = clientHeight * 6;
     
@@ -8698,7 +8698,7 @@ function updateVisibleCards(grid, scrollContainer, force = false) {
 // card path picks (gated on the same setting) so the cache key lines up.
 const inFlightPreloads = new Set();
 function preloadImages(indices) {
-    const isMobile = window.matchMedia?.('(max-width: 768px)').matches;
+    const isMobile = window.matchMedia?.('(max-width: 900px)').matches;
     const cap = isMobile ? 10 : 12;
     if (inFlightPreloads.size >= cap) return;
     // Match the card path's URL choice exactly so the browser cache hits. Single source of truth for the
@@ -9389,7 +9389,7 @@ function renderGalleryImages(files, folderName) {
         const audioSection = document.createElement('div');
         audioSection.className = 'gallery-audio-section';
         
-        const collapseThreshold = window.innerWidth <= 768 ? 2 : 4;
+        const collapseThreshold = window.innerWidth <= 900 ? 2 : 4;
         const shouldCollapse = audioFiles.length > collapseThreshold;
         
         const titleEl = document.createElement('div');
@@ -10024,7 +10024,7 @@ function navigateModal(direction) {
 // Mirror the preload path's thumb gate so the modal-hero prefetch agrees on cache-warmth.
 function gridUsesThumbnails() {
     if (getSetting('useGridThumbnails') !== true) return false;
-    const isMobile = window.matchMedia?.('(max-width: 768px)').matches;
+    const isMobile = window.matchMedia?.('(max-width: 900px)').matches;
     return !!(isMobile || getSetting('gridThumbnailsDesktop') === true);
 }
 
@@ -10103,7 +10103,7 @@ async function openModal(char, { navList } = {}) {
         clearPendingAvatar();
     }
 
-    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+    if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
         const modal = document.getElementById('charModal');
         if (modal) {
             const modalBody = modal.querySelector('.modal-body');
@@ -14672,7 +14672,7 @@ function openAdvFilterPresetsPanel() {
         rerenderAdvFilterPresets();
         document.getElementById('advFilterPresetsPanel')?.classList.remove('hidden');
         document.getElementById('advFilterPresetsBtn')?.classList.add('active');
-        if (!window.matchMedia('(max-width: 768px)').matches) {
+        if (!window.matchMedia('(max-width: 900px)').matches) {
             setTimeout(() => document.getElementById('advFilterPresetNameInput')?.focus(), 50);
         }
     });
@@ -15302,7 +15302,7 @@ function updateMobileChatButtonVisibility() {
     const chatBtn = document.getElementById('modalChatBtn');
     if (!chatBtn) return;
 
-    const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    const isMobile = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
     if (!isMobile) {
         chatBtn.classList.remove('mobile-chat-hidden');
         return;

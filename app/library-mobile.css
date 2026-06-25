@@ -4,10 +4,10 @@
    ======================================== */
 
 /* ----------------------------------------
-   SHARED (all ≤768px)
+   SHARED (all ≤900px)
    Reset fundamentals once, avoid duplication
    ---------------------------------------- */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 900px) {
 
     /* --- Viewport lock --- */
     html, body, .app-container {
@@ -3593,10 +3593,10 @@
 
 
 /* ========================================
-   TABLET  (481px – 768px)
+   TABLET  (481px – 900px)
    Slightly more room than phone
    ======================================== */
-@media screen and (min-width: 481px) and (max-width: 768px) {
+@media screen and (min-width: 481px) and (max-width: 900px) {
 
     .topbar {
         height: auto;
@@ -3628,7 +3628,7 @@
 /* ========================================
    LANDSCAPE PHONE
    ======================================== */
-@media screen and (max-width: 768px) and (orientation: landscape) {
+@media screen and (max-width: 900px) and (orientation: landscape) {
     .mobile-sheet { max-height: 85vh; }
 }
 

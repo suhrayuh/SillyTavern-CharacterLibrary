@@ -4229,7 +4229,7 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 /* Mobile: tighter meta block to match browse-card's 8px / 60px sizing */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 900px) {
     .cl-skeleton-card {
         border-radius: var(--radius-xl);
     }
@@ -5224,7 +5224,7 @@ input[type="search"]::-webkit-search-results-decoration {
     color: #d32f2f;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     /* On mobile the desktop hero portrait is hidden; the visible avatar is the
        small thumbnail injected into the modal header by library-mobile.js.
        When edit lock is unlocked, give it an accent-color pulsing glow so the
@@ -7358,7 +7358,7 @@ input[type="search"]::-webkit-search-results-decoration {
     }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .char-dup-comparison {
         grid-template-columns: 1fr;
         gap: var(--space-lg);
