@@ -774,9 +774,9 @@ Licensed under the [GNU Affero General Public License v3](LICENSE).
 
 ---
 
-## Fork-Specific Changes (Rayas-Tavern)
+## Fork-Specific Changes
 
-These changes were made on top of upstream Character Library v6.4.0 for the [Rayas-Tavern](https://github.com/suhrayuh/Rayas-Tavern) fork.
+These changes were made on top of upstream Character Library v6.4.0.
 
 ### Always-Edit Setting
 
