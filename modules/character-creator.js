@@ -188,6 +188,9 @@ function createModal() {
                                 </div>
                                 <input type="search" id="creatorTagline" class="glass-input" placeholder="Short hook shown under the name" autocomplete="one-time-code">
                             </div>
+                            <div id="cl-creator-nickname-section" class="form-group cl-nickname-section">
+                                <!-- Populated by Nicknames extension integration -->
+                            </div>
                         </div>
 
                         <div class="edit-section">
@@ -195,27 +198,42 @@ function createModal() {
                             <div class="form-group creator-field-group">
                                 <div class="creator-field-header">
                                     <label>Description / Persona</label>
-                                    <button type="button" class="creator-ai-btn" data-field="description" title="Generate with AI">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                    </button>
+                                    <div class="creator-field-actions">
+                                        <button type="button" class="creator-ai-btn" data-field="description" title="Generate with AI">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        </button>
+                                        <button type="button" class="alt-field-btn hidden" data-save-key="alt_descriptions" data-target="creatorDescription" title="Manage alternate descriptions">
+                                            <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                        </button>
+                                    </div>
                                 </div>
                                 <textarea id="creatorDescription" class="glass-input" rows="6" placeholder="Who is this character? Their appearance, backstory, personality..."></textarea>
                             </div>
                             <div class="form-group creator-field-group">
                                 <div class="creator-field-header">
                                     <label>Personality Summary</label>
-                                    <button type="button" class="creator-ai-btn" data-field="personality" title="Generate with AI">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                    </button>
+                                    <div class="creator-field-actions">
+                                        <button type="button" class="creator-ai-btn" data-field="personality" title="Generate with AI">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        </button>
+                                        <button type="button" class="alt-field-btn hidden" data-save-key="alt_personalities" data-target="creatorPersonality" title="Manage alternate personalities">
+                                            <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                        </button>
+                                    </div>
                                 </div>
                                 <textarea id="creatorPersonality" class="glass-input" rows="3" placeholder="Key traits, mannerisms, quirks..."></textarea>
                             </div>
                             <div class="form-group creator-field-group">
                                 <div class="creator-field-header">
                                     <label>Scenario / Setting</label>
-                                    <button type="button" class="creator-ai-btn" data-field="scenario" title="Generate with AI">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                    </button>
+                                    <div class="creator-field-actions">
+                                        <button type="button" class="creator-ai-btn" data-field="scenario" title="Generate with AI">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        </button>
+                                        <button type="button" class="alt-field-btn hidden" data-save-key="alt_scenarios" data-target="creatorScenario" title="Manage alternate scenarios">
+                                            <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                        </button>
+                                    </div>
                                 </div>
                                 <textarea id="creatorScenario" class="glass-input" rows="3" placeholder="Where and when does the story take place?"></textarea>
                             </div>
@@ -242,9 +260,14 @@ function createModal() {
                             <div class="form-group creator-field-group">
                                 <div class="creator-field-header">
                                     <label>Example Dialogue</label>
-                                    <button type="button" class="creator-ai-btn" data-field="mes_example" title="Generate with AI">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                    </button>
+                                    <div class="creator-field-actions">
+                                        <button type="button" class="creator-ai-btn" data-field="mes_example" title="Generate with AI">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        </button>
+                                        <button type="button" class="alt-field-btn hidden" data-save-key="alt_example_dialogue" data-target="creatorMesExample" title="Manage alternate example dialogues">
+                                            <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                        </button>
+                                    </div>
                                 </div>
                                 <textarea id="creatorMesExample" class="glass-input" rows="4" placeholder="{{user}}: Hello!\n{{char}}: *waves* Hi there!"></textarea>
                             </div>
@@ -255,14 +278,24 @@ function createModal() {
                             <div class="form-group creator-field-group">
                                 <div class="creator-field-header">
                                     <label>System Prompt <span class="label-hint">(Override)</span></label>
-                                    <button type="button" class="creator-ai-btn" data-field="system_prompt" title="Generate with AI">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                    </button>
+                                    <div class="creator-field-actions">
+                                        <button type="button" class="creator-ai-btn" data-field="system_prompt" title="Generate with AI">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                        </button>
+                                        <button type="button" class="alt-field-btn hidden" data-save-key="alt_main_prompts" data-target="creatorSystemPrompt" title="Manage alternate system prompts">
+                                            <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                        </button>
+                                    </div>
                                 </div>
                                 <textarea id="creatorSystemPrompt" class="glass-input" rows="3" placeholder="Optional system prompt override..."></textarea>
                             </div>
                             <div class="form-group">
                                 <label>Post-History Instructions <span class="label-hint">(Jailbreak)</span></label>
+                                <div class="field-action-buttons" style="margin-bottom: 6px;">
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_post_history" data-target="creatorPostHistory" title="Manage alternate post-history instructions">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="creatorPostHistory" class="glass-input" rows="3" placeholder="Instructions placed after chat history..."></textarea>
                             </div>
                             <div class="form-group creator-field-group">
@@ -337,6 +370,14 @@ function openModal() {
     }
     loadProfiles().catch(err => CoreAPI.debugLog('[Creator] Profile load error:', err));
     buildTagAutocomplete();
+
+    // Populate nickname section in creator (info message — actual editing requires an existing character)
+    if (typeof window.populateCreatorNicknameEditor === 'function') {
+        window.populateCreatorNicknameEditor('cl-creator-nickname-section');
+    }
+
+    // Initialize Alternate Fields buttons in creator (hidden since creator has no char data yet)
+    document.querySelectorAll('#creatorModal .alt-field-btn').forEach(btn => btn.classList.add('hidden'));
 }
 
 function closeModal() {

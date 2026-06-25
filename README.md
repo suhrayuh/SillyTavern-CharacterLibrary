@@ -771,3 +771,39 @@ We treat these as bugs and fix them as they come, but this kind of breakage is i
 ## License
 
 Licensed under the [GNU Affero General Public License v3](LICENSE).
+
+---
+
+## Fork-Specific Changes (Rayas-Tavern)
+
+These changes were made on top of upstream Character Library v6.4.0 for the [Rayas-Tavern](https://github.com/suhrayuh/Rayas-Tavern) fork.
+
+### Always-Edit Setting
+
+A persistent toggle in **Settings → Character Details** that keeps the Edit tab unlocked by default, skipping the "Unlock Editing" step each time you open a character.
+
+- Added `alwaysEditEnabled` setting (default: off)
+- Checkbox in Character Details settings group
+- Respects the setting across modal opens, character switches, and saves
+
+### Nicknames Extension Compatibility
+
+Full integration with [SillyTavern-Nicknames](https://github.com/SillyTavern/SillyTavern-Nicknames). When the Nicknames extension is installed, a **Nickname editor** appears in the Edit tab and Creator for each character.
+
+- Read/write nicknames at Global, Character, and Chat levels
+- Context selector to choose where the nickname is saved
+- "View all levels" drawer showing all saved nicknames and the effective result
+- Lock integration: nickname inputs are disabled when editing is locked
+- Creator shows an info message (nicknames require an existing character)
+
+### Alternate Fields Extension Compatibility
+
+Integration with [SillyTavern-AlternateDescriptions](https://github.com/nbrown725/SillyTavern-AlternateDescriptions). **Alt. buttons** appear next to the expand button on all six supported fields in the Edit tab and Creator.
+
+- Supported fields: Description, Personality, Scenario, Example Dialogue, System Prompt, Post-History Instructions
+- Clicking an Alt. button opens a Character Library modal (not the ST popup) listing all saved alternates
+- Each alternate shows title, token count, and Use/Delete buttons
+- "Use" loads the alternate into the editor field with active state indicator
+- Token counts are calculated via SillyTavern's tokenizer
+- Data is read/written directly via `writeCardFields` and `applyCardFieldUpdates`
+- Lock integration: Alt. buttons are hidden when editing is locked

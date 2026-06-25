@@ -537,29 +537,47 @@
                                 <label>Listing Name</label>
                                 <input type="search" id="editListingName" class="glass-input" placeholder="Provider page title shown as an alternate name" autocomplete="one-time-code">
                             </div>
+                            <div id="cl-nickname-section" class="form-group cl-nickname-section">
+                                <!-- Populated by Nicknames extension integration -->
+                            </div>
                         </div>
 
                         <div class="edit-section">
                             <h4 class="section-header"><i class="fa-solid fa-scroll"></i> Character Definition</h4>
                             <div class="form-group expandable-field">
                                 <label>Description / Persona</label>
-                                <button type="button" class="expand-field-btn hidden" data-field="editDescription" data-label="Description / Persona" title="Expand editor">
-                                    <i class="fa-solid fa-expand"></i>
-                                </button>
+                                <div class="field-action-buttons">
+                                    <button type="button" class="expand-field-btn hidden" data-field="editDescription" data-label="Description / Persona" title="Expand editor">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_descriptions" data-target="editDescription" title="Manage alternate descriptions">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="editDescription" class="glass-input" rows="5" placeholder="Who is this character?" autocomplete="one-time-code"></textarea>
                             </div>
                             <div class="form-group expandable-field">
                                 <label>Personality Summary</label>
-                                <button type="button" class="expand-field-btn hidden" data-field="editPersonality" data-label="Personality Summary" title="Expand editor">
-                                    <i class="fa-solid fa-expand"></i>
-                                </button>
+                                <div class="field-action-buttons">
+                                    <button type="button" class="expand-field-btn hidden" data-field="editPersonality" data-label="Personality Summary" title="Expand editor">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_personalities" data-target="editPersonality" title="Manage alternate personalities">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="editPersonality" class="glass-input" rows="3" placeholder="Brief personality traits..." autocomplete="one-time-code"></textarea>
                             </div>
                             <div class="form-group expandable-field">
                                 <label>Scenario / Setting</label>
-                                <button type="button" class="expand-field-btn hidden" data-field="editScenario" data-label="Scenario / Setting" title="Expand editor">
-                                    <i class="fa-solid fa-expand"></i>
-                                </button>
+                                <div class="field-action-buttons">
+                                    <button type="button" class="expand-field-btn hidden" data-field="editScenario" data-label="Scenario / Setting" title="Expand editor">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_scenarios" data-target="editScenario" title="Manage alternate scenarios">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="editScenario" class="glass-input" rows="3" placeholder="The current situation..." autocomplete="one-time-code"></textarea>
                             </div>
                         </div>
@@ -586,9 +604,14 @@
                             </div>
                             <div class="form-group expandable-field">
                                 <label>Example Dialogue <span class="label-hint">(for training context)</span></label>
-                                <button type="button" class="expand-field-btn hidden" data-field="editMesExample" data-label="Example Dialogue" title="Expand editor">
-                                    <i class="fa-solid fa-expand"></i>
-                                </button>
+                                <div class="field-action-buttons">
+                                    <button type="button" class="expand-field-btn hidden" data-field="editMesExample" data-label="Example Dialogue" title="Expand editor">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_example_dialogue" data-target="editMesExample" title="Manage alternate example dialogues">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="editMesExample" class="glass-input" rows="5" placeholder="{{user}}: Hello!\n{{char}}: *waves* Hi there!" autocomplete="one-time-code"></textarea>
                             </div>
                         </div>
@@ -597,16 +620,26 @@
                             <h4 class="section-header"><i class="fa-solid fa-wand-magic-sparkles"></i> Advanced (Prompt Overrides)</h4>
                             <div class="form-group expandable-field">
                                 <label>System Prompt <span class="label-hint">(Main Prompt Override)</span></label>
-                                <button type="button" class="expand-field-btn hidden" data-field="editSystemPrompt" data-label="System Prompt" title="Expand editor">
-                                    <i class="fa-solid fa-expand"></i>
-                                </button>
+                                <div class="field-action-buttons">
+                                    <button type="button" class="expand-field-btn hidden" data-field="editSystemPrompt" data-label="System Prompt" title="Expand editor">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_main_prompts" data-target="editSystemPrompt" title="Manage alternate system prompts">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="editSystemPrompt" class="glass-input" rows="4" placeholder="Overrides your default system prompt..." autocomplete="one-time-code"></textarea>
                             </div>
                             <div class="form-group expandable-field">
                                 <label>Post-History Instructions <span class="label-hint">(Jailbreak)</span></label>
-                                <button type="button" class="expand-field-btn hidden" data-field="editPostHistoryInstructions" data-label="Post-History Instructions" title="Expand editor">
-                                    <i class="fa-solid fa-expand"></i>
-                                </button>
+                                <div class="field-action-buttons">
+                                    <button type="button" class="expand-field-btn hidden" data-field="editPostHistoryInstructions" data-label="Post-History Instructions" title="Expand editor">
+                                        <i class="fa-solid fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="alt-field-btn hidden" data-save-key="alt_post_history" data-target="editPostHistoryInstructions" title="Manage alternate post-history instructions">
+                                        <i class="fa-solid fa-bars-staggered"></i> Alt.
+                                    </button>
+                                </div>
                                 <textarea id="editPostHistoryInstructions" class="glass-input" rows="4" placeholder="Instructions placed after chat history..." autocomplete="one-time-code"></textarea>
                             </div>
                             <div class="form-group expandable-field">
@@ -2158,6 +2191,12 @@ https://jannyai.com/characters/uuid_slug
                                 </label>
                                 <span class="settings-hint">In online browse previews, start every section collapsed except creator's notes. Click a section title to toggle it open.</span>
                             </div>
+                            <div class="settings-row">
+                                <label>
+                                    <input type="checkbox" id="settingsAlwaysEdit"> Skip edit lock — fields unlocked by default
+                                </label>
+                                <span class="settings-hint">When enabled, the Edit tab opens with fields already unlocked (no need to click "Unlock Editing" each time).</span>
+                            </div>
                         </div>
 
                         <div class="settings-group">
@@ -3195,6 +3234,23 @@ https://jannyai.com/characters/uuid_slug
                 </div>
                 <button type="submit" class="mobile-online-search-submit">Search</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Alternate Descriptions Modal -->
+    <div id="altDescriptionsModal" class="cl-modal">
+        <div class="cl-modal-content alt-descriptions-modal-content">
+            <div class="cl-modal-header">
+                <h3><i class="fa-solid fa-bars-staggered"></i> <span id="altModalTitle">Alternate Descriptions</span></h3>
+                <button class="cl-modal-close" id="closeAltDescriptionsModal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="cl-modal-body" id="altDescriptionsModalBody">
+                <!-- Populated by JS -->
+            </div>
+            <div class="cl-modal-footer">
+                <button id="altModalAddBtn" class="action-btn secondary"><i class="fa-solid fa-plus"></i> Add New</button>
+                <button id="altModalDoneBtn" class="action-btn primary"><i class="fa-solid fa-check"></i> Done</button>
+            </div>
         </div>
     </div>
 

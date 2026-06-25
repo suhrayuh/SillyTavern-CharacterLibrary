@@ -583,6 +583,7 @@ const DEFAULT_SETTINGS = {
     gridThumbnailsClHelper: true,
     gridThumbnailSize: 512,
     enableCharDetailNav: true,
+    alwaysEditEnabled: false,
 
     // ---- Provider Config ----
     chubUseV4Api: false,
@@ -1645,6 +1646,7 @@ function setupSettingsModal() {
     const allowRichTaglineCheckbox = document.getElementById('settingsAllowRichTagline');
     const browseSnapSectionsCheckbox = document.getElementById('settingsBrowseSnapSections');
     const collapseAllBrowseSectionsCheckbox = document.getElementById('settingsCollapseAllBrowseSections');
+    const alwaysEditCheckbox = document.getElementById('settingsAlwaysEdit');
     const mobileProviderQuickSwitchCheckbox = document.getElementById('settingsMobileProviderQuickSwitch');
     const mobileHideBackArrowsCheckbox = document.getElementById('settingsMobileHideBackArrows');
     const mobileBrowseQuickImportCheckbox = document.getElementById('settingsMobileBrowseQuickImport');
@@ -2743,6 +2745,9 @@ function setupSettingsModal() {
         if (collapseAllBrowseSectionsCheckbox) {
             collapseAllBrowseSectionsCheckbox.checked = getSetting('collapseAllBrowseSections') === true;
         }
+        if (alwaysEditCheckbox) {
+            alwaysEditCheckbox.checked = getSetting('alwaysEditEnabled') === true;
+        }
         if (mobileProviderQuickSwitchCheckbox) {
             mobileProviderQuickSwitchCheckbox.checked = getSetting('mobileProviderQuickSwitch') !== false;
         }
@@ -3243,6 +3248,7 @@ function setupSettingsModal() {
             collapseAllBrowseSections: collapseAllBrowseSectionsCheckbox ? collapseAllBrowseSectionsCheckbox.checked : false,
             mobileProviderQuickSwitch: mobileProviderQuickSwitchCheckbox ? mobileProviderQuickSwitchCheckbox.checked : true,
             mobileHideBackArrows: mobileHideBackArrowsCheckbox ? mobileHideBackArrowsCheckbox.checked : false,
+            alwaysEditEnabled: alwaysEditCheckbox ? alwaysEditCheckbox.checked : false,
             mobileBrowseQuickImport: mobileBrowseQuickImportCheckbox ? mobileBrowseQuickImportCheckbox.checked : true,
             mobileSwipeGestures: mobileSwipeGesturesCheckbox ? mobileSwipeGesturesCheckbox.checked : true,
             mobileHaptics: mobileHapticsCheckbox ? mobileHapticsCheckbox.checked : true,
@@ -3437,6 +3443,9 @@ function setupSettingsModal() {
         }
         if (collapseAllBrowseSectionsCheckbox) {
             collapseAllBrowseSectionsCheckbox.checked = DEFAULT_SETTINGS.collapseAllBrowseSections;
+        }
+        if (alwaysEditCheckbox) {
+            alwaysEditCheckbox.checked = DEFAULT_SETTINGS.alwaysEditEnabled;
         }
         if (mobileProviderQuickSwitchCheckbox) {
             mobileProviderQuickSwitchCheckbox.checked = DEFAULT_SETTINGS.mobileProviderQuickSwitch;
@@ -10099,7 +10108,7 @@ async function openModal(char, { navList } = {}) {
         if (!ok) return;
     }
     if (isSwap) {
-        setEditLock(true);
+        setEditLock(!getSetting('alwaysEditEnabled'));
         clearPendingAvatar();
     }
 
@@ -10605,12 +10614,456 @@ async function populateEditPane() {
     };
 
     // Lock edit fields by default (must come after editor population so dynamic elements are locked)
-    setEditLock(true);
+    setEditLock(!getSetting('alwaysEditEnabled'));
+
+    // Populate nickname editor if SillyTavern-Nicknames extension is available
+    populateNicknameEditor('cl-nickname-section', activeChar);
+
+    // Initialize Alternate Fields buttons
+    initAltFieldButtons();
 }
 
 // =====================================================
-// Card Image (avatar) replacement state — Edit tab
+// Nicknames Extension Integration
 // =====================================================
+
+const NICKNAME_EDITOR_HTML = `
+<div class="nickname-editor-container">
+    <div class="nickname-header-row flex-container justifySpaceBetween alignItemsCenter flexNoWrap">
+        <h4 class="nickname-title flex-container alignItemsCenter flexNoWrap gap-sm">
+            <span data-i18n="Nickname">Nickname</span>
+            <i class="fa-solid fa-circle-info opacity50p nickname-extension-icon"
+               title="This section is provided by the SillyTavern-Nicknames extension"></i>
+        </h4>
+        <div class="context-indicators flex-container flexNoWrap gap-sm">
+            <i class="fa-solid fa-globe context-icon" data-context="global"></i>
+            <i class="fa-solid fa-user context-icon" data-context="char"></i>
+            <i class="fa-solid fa-message context-icon" data-context="chat"></i>
+        </div>
+    </div>
+    <div class="nickname-input-row">
+        <input type="text" class="nickname-input text_pole" placeholder="No nickname set" maxlength="100" />
+        <button class="nickname-save-btn menu_button" title="Save to selected context"><i class="fa-solid fa-check"></i></button>
+        <button class="nickname-clear-btn menu_button" title="Clear from selected context"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="nickname-context-selector">
+        <div class="context-buttons flex-container alignItemsCenter flexNoWrap gap-sm">
+            <small data-i18n="Save to:">Save to:</small>
+            <div class="context-btn menu_button menu_button_icon" data-context="global" title="Applies everywhere">
+                <i class="fa-solid fa-globe fa-fw"></i>
+                <span data-i18n="Global">Global</span>
+            </div>
+            <div class="context-btn menu_button menu_button_icon active" data-context="char" title="For this character-persona pair (personas only)">
+                <i class="fa-solid fa-user fa-fw"></i>
+                <span data-i18n="Char">Char</span>
+            </div>
+            <div class="context-btn menu_button menu_button_icon" data-context="chat" title="For this chat only">
+                <i class="fa-solid fa-message fa-fw"></i>
+                <span data-i18n="Chat">Chat</span>
+            </div>
+        </div>
+    </div>
+    <div class="nickname-summary" style="margin-top: 8px;">
+        <div class="inline-drawer-toggle inline-drawer-header flex-container alignItemsCenter gap-sm">
+            <small data-i18n="View all levels">View all levels</small>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <div class="nickname-levels">
+                <div class="level-row flex-container justifySpaceBetween alignItemsCenter flexNoWrap" data-level="global">
+                    <span class="level-name flex-container alignItemsCenter flexNoWrap gap-sm"><i class="fa-solid fa-globe"></i> Global:</span>
+                    <span class="level-value"></span>
+                </div>
+                <div class="level-row flex-container justifySpaceBetween alignItemsCenter flexNoWrap" data-level="char">
+                    <span class="level-name flex-container alignItemsCenter flexNoWrap gap-sm"><i class="fa-solid fa-user"></i> Character:</span>
+                    <span class="level-value"></span>
+                </div>
+                <div class="level-row flex-container justifySpaceBetween alignItemsCenter flexNoWrap" data-level="chat">
+                    <span class="level-name flex-container alignItemsCenter flexNoWrap gap-sm"><i class="fa-solid fa-message"></i> Chat:</span>
+                    <span class="level-value"></span>
+                </div>
+                <div class="level-row effective flex-container justifySpaceBetween alignItemsCenter flexNoWrap" data-level="effective">
+                    <span class="level-name flex-container alignItemsCenter flexNoWrap gap-sm"><i class="fa-solid fa-check-circle"></i> Effective:</span>
+                    <span class="level-value"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>`;
+
+function populateNicknameEditor(containerId, char) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+
+    const ctx = getSTContext();
+    if (!ctx) return;
+
+    // Check if Nicknames extension is installed
+    const hasNicknames = ctx.extensionSettings?.nicknames != null;
+    if (!hasNicknames) {
+        container.innerHTML = `<small class="opacity50p"><i class="fa-solid fa-puzzle-piece"></i> Install <strong>SillyTavern-Nicknames</strong> to set custom nicknames for this character.</small>`;
+        return;
+    }
+
+    if (!char) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = NICKNAME_EDITOR_HTML;
+    const editor = wrapper.firstElementChild;
+    container.appendChild(editor);
+
+    const charAvatar = char.avatar;
+    const personaKey = ctx.user_avatar || '';
+
+    // --- Helpers to read/write nicknames via parent context ---
+    function getNicknameMappings() {
+        const c = getSTContext();
+        return c?.extensionSettings?.nicknames?.mappings || {};
+    }
+    function getChatNicknames() {
+        const c = getSTContext();
+        return c?.chatMetadata?.nicknames || {};
+    }
+
+    function readNickname(level) {
+        const mappings = getNicknameMappings();
+        if (level === 'global') {
+            return mappings?.global?.chars?.[charAvatar] || '';
+        }
+        if (level === 'char') {
+            return mappings?.char?.[charAvatar]?.personas?.[personaKey] || '';
+        }
+        if (level === 'chat') {
+            return getChatNicknames()?.chars?.[charAvatar] || '';
+        }
+        return '';
+    }
+
+    function writeNickname(level, value) {
+        const c = getSTContext();
+        if (!c) return;
+        const mappings = getNicknameMappings();
+
+        if (level === 'global') {
+            if (!mappings.global) mappings.global = { personas: {}, chars: {} };
+            if (!mappings.global.chars) mappings.global.chars = {};
+            if (value) { mappings.global.chars[charAvatar] = value; }
+            else { delete mappings.global.chars[charAvatar]; }
+        } else if (level === 'char') {
+            if (!mappings.char) mappings.char = {};
+            if (!mappings.char[charAvatar]) mappings.char[charAvatar] = { personas: {} };
+            if (!mappings.char[charAvatar].personas) mappings.char[charAvatar].personas = {};
+            if (value) { mappings.char[charAvatar].personas[personaKey] = value; }
+            else { delete mappings.char[charAvatar].personas[personaKey]; }
+        } else if (level === 'chat') {
+            const chatMeta = c.chatMetadata || {};
+            if (!chatMeta.nicknames) chatMeta.nicknames = { personas: {}, chars: {} };
+            if (!chatMeta.nicknames.chars) chatMeta.nicknames.chars = {};
+            if (value) { chatMeta.nicknames.chars[charAvatar] = value; }
+            else { delete chatMeta.nicknames.chars[charAvatar]; }
+            c.saveChatDebounced?.();
+        }
+
+        c.extensionSettings.nicknames.mappings = mappings;
+        c.saveSettingsDebounced?.();
+    }
+
+    // --- State ---
+    // Auto-detect which context has a saved nickname so input isn't blank
+    let selectedContext = readNickname('chat') ? 'chat' : readNickname('char') ? 'char' : readNickname('global') ? 'global' : 'global';
+
+    // --- DOM refs ---
+    const input = editor.querySelector('.nickname-input');
+    const saveBtn = editor.querySelector('.nickname-save-btn');
+    const clearBtn = editor.querySelector('.nickname-clear-btn');
+    const contextBtns = editor.querySelectorAll('.context-btn');
+    const contextIcons = editor.querySelectorAll('.context-icon');
+    const drawerToggle = editor.querySelector('.inline-drawer-toggle');
+    const drawerContent = editor.querySelector('.inline-drawer-content');
+    const levelValues = editor.querySelectorAll('.level-value');
+
+    function getEffectiveNickname() {
+        const chatVal = readNickname('chat');
+        const charVal = readNickname('char');
+        const globalVal = readNickname('global');
+        return chatVal || charVal || globalVal || '';
+    }
+
+    function refreshUI() {
+        const val = readNickname(selectedContext) || getEffectiveNickname();
+        input.value = val;
+        input.placeholder = val ? '' : 'No nickname set';
+
+        contextBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.context === selectedContext));
+
+        // Context indicators: highlight if set at that level
+        contextIcons.forEach(icon => {
+            const level = icon.dataset.context;
+            icon.classList.toggle('opacity50p', !readNickname(level));
+            icon.classList.toggle('nickname-set', !!readNickname(level));
+        });
+
+        // Level summary
+        levelValues.forEach(el => {
+            const level = el.closest('.level-row')?.dataset.level;
+            if (level === 'effective') {
+                el.textContent = getEffectiveNickname() || '—';
+            } else {
+                el.textContent = readNickname(level) || '—';
+            }
+        });
+
+        clearBtn.disabled = !readNickname(selectedContext) && !getEffectiveNickname();
+    }
+
+    // --- Event listeners (wired in iframe, NOT delegated to parent) ---
+    contextBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedContext = btn.dataset.context;
+            refreshUI();
+        });
+    });
+
+    saveBtn.addEventListener('click', () => {
+        const value = input.value.trim();
+        writeNickname(selectedContext, value);
+        refreshUI();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        writeNickname(selectedContext, '');
+        input.value = '';
+        refreshUI();
+    });
+
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveBtn.click();
+        }
+    });
+
+    drawerToggle?.addEventListener('click', () => {
+        drawerContent?.classList.toggle('open');
+        const icon = drawerToggle.querySelector('.inline-drawer-icon');
+        icon?.classList.toggle('down');
+    });
+
+    refreshUI();
+}
+window.populateNicknameEditor = populateNicknameEditor;
+
+/**
+ * Populate nickname editor in the character creator.
+ * Shows an info message since nicknames require an existing character.
+ */
+function populateCreatorNicknameEditor(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = `<small class="opacity50p"><i class="fa-solid fa-circle-info"></i> Nickname editing available after character creation.</small>`;
+}
+window.populateCreatorNicknameEditor = populateCreatorNicknameEditor;
+
+// =====================================================
+// Alternate Fields Extension Integration
+// =====================================================
+
+const ALT_FIELD_CONFIGS = [
+    { saveKey: 'alt_descriptions',      label: 'Descriptions',      textareaIds: ['editDescription', 'creatorDescription'] },
+    { saveKey: 'alt_personalities',     label: 'Personalities',     textareaIds: ['editPersonality', 'creatorPersonality'] },
+    { saveKey: 'alt_scenarios',         label: 'Scenarios',         textareaIds: ['editScenario', 'creatorScenario'] },
+    { saveKey: 'alt_example_dialogue',  label: 'Example Dialogue',  textareaIds: ['editMesExample', 'creatorMesExample'] },
+    { saveKey: 'alt_main_prompts',      label: 'Main Prompts',      textareaIds: ['editSystemPrompt', 'creatorSystemPrompt'] },
+    { saveKey: 'alt_post_history',      label: 'Post-History Instructions', textareaIds: ['editPostHistoryInstructions', 'creatorPostHistory'] },
+];
+
+function isAlternateFieldsInstalled() {
+    const ctx = getSTContext();
+    if (!ctx) return false;
+    // Check if the extension loaded its field injection by looking for any alt_fields_button in the ST host
+    // Or simply: check if we can access character data with extensions
+    return typeof ctx.writeExtensionField === 'function';
+}
+
+function initAltFieldButtons() {
+    const buttons = document.querySelectorAll('.alt-field-btn');
+    buttons.forEach(btn => btn.classList.remove('hidden'));
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const saveKey = btn.dataset.saveKey;
+            if (saveKey) openAltDescriptionsPopup(saveKey);
+        });
+    });
+}
+
+function getAltFieldData(saveKey) {
+    if (!activeChar) return [];
+    // Read directly from CL's hydrated character data (not ST parent context)
+    return activeChar?.data?.extensions?.alternate_fields?.[saveKey] || [];
+}
+
+function saveAltFieldData(saveKey, entries) {
+    const ctx = getSTContext();
+    if (!ctx || !activeChar) return;
+    // Write directly to CL's character data, then persist via writeCardFields
+    if (!activeChar.data) activeChar.data = {};
+    if (!activeChar.data.extensions) activeChar.data.extensions = {};
+    if (!activeChar.data.extensions.alternate_fields) activeChar.data.extensions.alternate_fields = {};
+    activeChar.data.extensions.alternate_fields[saveKey] = entries;
+    // Use CL's own writeCardFields to persist to server
+    window.applyCardFieldUpdates?.(activeChar.avatar, { [`extensions.alternate_fields.${saveKey}`]: entries });
+}
+
+async function openAltDescriptionsPopup(saveKey) {
+    const config = ALT_FIELD_CONFIGS.find(c => c.saveKey === saveKey);
+    if (!config || !activeChar) return;
+
+    // Re-hydrate to get fresh extension data (AlternateDescriptions writes to the card directly)
+    await hydrateCharacter(activeChar);
+
+    const entries = getAltFieldData(saveKey);
+    const charName = activeChar?.name || 'Character';
+
+    // Find the matching textarea for "Use"
+    const targetTextareaId = config.textareaIds.find(id => document.getElementById(id));
+    const targetTextarea = targetTextareaId ? document.getElementById(targetTextareaId) : null;
+
+    // Update modal title
+    document.getElementById('altModalTitle').textContent = `Alternate ${config.label} for ${charName}`;
+
+    const modal = document.getElementById('altDescriptionsModal');
+    const body = document.getElementById('altDescriptionsModalBody');
+    const addBtn = document.getElementById('altModalAddBtn');
+    const doneBtn = document.getElementById('altModalDoneBtn');
+    const closeBtn = document.getElementById('closeAltDescriptionsModal');
+
+    // Build the body content
+    body.innerHTML = `
+        <div class="alt-popup-intro">
+            <small class="opacity50p">Save different versions of this field. Click <strong>Use</strong> to load an alternate into the editor, then save the character.</small>
+        </div>
+        <div id="alt-field-list"></div>`;
+
+    const listEl = document.getElementById('alt-field-list');
+    renderAltFieldList(listEl, saveKey, config, targetTextarea);
+
+    // Wire Add New
+    addBtn.onclick = () => {
+        const currentData = getAltFieldData(saveKey);
+        const currentContent = targetTextarea?.value || '';
+        currentData.push({
+            title: `${config.label} #${currentData.length + 1}`,
+            content: currentContent,
+        });
+        saveAltFieldData(saveKey, currentData);
+        renderAltFieldList(listEl, saveKey, config, targetTextarea);
+    };
+
+    // Wire Done + Close
+    const hideModal = () => modal.classList.remove('visible');
+    doneBtn.onclick = hideModal;
+    closeBtn.onclick = hideModal;
+    modal.onclick = (e) => { if (e.target === modal) hideModal(); };
+
+    // Show modal
+    modal.classList.add('visible');
+}
+
+function renderAltFieldList(listEl, saveKey, config, targetTextarea) {
+    const entries = getAltFieldData(saveKey);
+    if (!entries.length) {
+        listEl.innerHTML = `<div class="justifyLeft" style="padding: 12px;"><small class="opacity50p">No alternate versions saved yet. Click <strong>Add New</strong> to save the current field content as the first alternate.</small></div>`;
+        return;
+    }
+
+    // Trim both for reliable comparison
+    const currentContent = (targetTextarea?.value || '').trim();
+
+    listEl.innerHTML = entries.map((entry, i) => {
+        const entryContent = (entry.content || '').trim();
+        const isActive = entryContent === currentContent;
+        return `
+        <div class="alt-entry${isActive ? ' active-field' : ''}" data-index="${i}">
+            <div class="alt-entry-top-row">
+                <input type="text" class="text_pole alt-entry-title" value="${entry.title?.replace(/"/g, '&quot;') || ''}" maxlength="50" placeholder="Title...">
+                <span class="alt-entry-tokens" data-token-idx="${i}">...</span>
+                <button type="button" class="alt-use-btn${isActive ? ' active' : ''}" data-index="${i}" title="${isActive ? 'Already in use' : 'Load into editor'}">
+                    <i class="fa-solid fa-${isActive ? 'check' : 'arrow-up'}"></i>
+                    <span>${isActive ? 'In Use' : 'Use'}</span>
+                </button>
+                <button type="button" class="alt-delete-btn" data-index="${i}" title="Delete this alternate">
+                    <i class="fa-solid fa-trash"></i><span>Delete</span>
+                </button>
+            </div>
+            <textarea class="text_pole alt-entry-content" rows="6" data-index="${i}">${entry.content || ''}</textarea>
+        </div>`;
+    }).join('');
+
+    // Token counting — async per entry
+    entries.forEach((entry, i) => {
+        const tokenEl = listEl.querySelector(`.alt-entry-tokens[data-token-idx="${i}"]`);
+        if (!tokenEl || !entry.content) { if (tokenEl) tokenEl.textContent = '0 tok'; return; }
+        const ctx = getSTContext();
+        if (ctx?.getTokenCountAsync) {
+            ctx.getTokenCountAsync(entry.content).then(count => {
+                tokenEl.textContent = count != null ? `${count} tok` : '—';
+            }).catch(() => { tokenEl.textContent = '—'; });
+        } else {
+            tokenEl.textContent = Math.ceil(entry.content.length / 4) + ' tok';
+        }
+    });
+
+    // Wire up Use buttons
+    listEl.querySelectorAll('.alt-use-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.classList.contains('active')) return; // already in use
+            const idx = parseInt(btn.dataset.index);
+            const data = getAltFieldData(saveKey);
+            if (data[idx] && targetTextarea) {
+                targetTextarea.value = data[idx].content || '';
+                targetTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                renderAltFieldList(listEl, saveKey, config, targetTextarea);
+                showToast?.(`Loaded "${data[idx].title || 'alternate'}" into the field`, 'success');
+            }
+        });
+    });
+
+    // Wire up Delete buttons
+    listEl.querySelectorAll('.alt-delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.index);
+            const data = getAltFieldData(saveKey);
+            if (!confirm(`Delete "${data[idx]?.title || 'this alternate'}"?`)) return;
+            data.splice(idx, 1);
+            saveAltFieldData(saveKey, data);
+            renderAltFieldList(listEl, saveKey, config, targetTextarea);
+        });
+    });
+
+    // Debounced title/content saves
+    let saveTimeout;
+    function debouncedSave() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            const items = listEl.querySelectorAll('.alt-entry');
+            const data = getAltFieldData(saveKey);
+            items.forEach((item, i) => {
+                if (data[i]) {
+                    data[i].title = item.querySelector('.alt-entry-title')?.value || data[i].title;
+                    data[i].content = item.querySelector('.alt-entry-content')?.value || data[i].content;
+                }
+            });
+            saveAltFieldData(saveKey, data);
+        }, 500);
+    }
+
+    listEl.querySelectorAll('.alt-entry-title, .alt-entry-content').forEach(el => {
+        el.addEventListener('input', debouncedSave);
+    });
+}
+
+// Card Image (avatar) replacement state — Edit tab
 
 function populateEditAvatarPreview() {
     const img = document.getElementById('modalImage');
@@ -12404,7 +12857,7 @@ async function performSave() {
             performSearch();
             
             // Lock editing and clean up
-            setEditLock(true);
+            setEditLock(!getSetting('alwaysEditEnabled'));
             pendingUpdates = null;
 
             // Tell ST to re-read the character so open chats pick up the edits
@@ -12646,6 +13099,9 @@ function setEditLock(locked) {
         expandFieldBtns.forEach(btn => btn.classList.add('hidden'));
         sectionExpandBtns.forEach(btn => btn.classList.add('hidden'));
 
+        // Hide Alt. field buttons when locked
+        document.querySelectorAll('.alt-field-btn').forEach(btn => btn.classList.add('hidden'));
+
         // Hide portrait click-to-change overlay
         if (portraitContainer) portraitContainer.classList.remove('editing-unlocked');
         if (portraitOverlay) portraitOverlay.classList.add('hidden');
@@ -12685,6 +13141,13 @@ function setEditLock(locked) {
         if (tagInputWrapper) tagInputWrapper.classList.add('hidden');
         if (tagsContainer) tagsContainer.classList.remove('editable');
         if (activeChar) renderSidebarTags(getCurrentTagsArray(), false);
+
+        // Lock nickname editor
+        document.querySelectorAll('#cl-nickname-section .nickname-input, #cl-nickname-section .nickname-save-btn, #cl-nickname-section .nickname-clear-btn, #cl-nickname-section .context-btn').forEach(el => {
+            el.disabled = true;
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.5';
+        });
     } else {
         lockHeader?.classList.add('unlocked');
         if (lockStatus) {
@@ -12708,6 +13171,9 @@ function setEditLock(locked) {
         // Show expand buttons when unlocked
         expandFieldBtns.forEach(btn => btn.classList.remove('hidden'));
         sectionExpandBtns.forEach(btn => btn.classList.remove('hidden'));
+
+        // Show Alt. field buttons when unlocked
+        document.querySelectorAll('.alt-field-btn').forEach(btn => btn.classList.remove('hidden'));
 
         // Show portrait click-to-change overlay
         if (portraitContainer) portraitContainer.classList.add('editing-unlocked');
@@ -12736,6 +13202,13 @@ function setEditLock(locked) {
         if (tagInputWrapper) tagInputWrapper.classList.remove('hidden');
         if (tagsContainer) tagsContainer.classList.add('editable');
         renderSidebarTags(getCurrentTagsArray(), true);
+
+        // Unlock nickname editor
+        document.querySelectorAll('#cl-nickname-section .nickname-input, #cl-nickname-section .nickname-save-btn, #cl-nickname-section .nickname-clear-btn, #cl-nickname-section .context-btn').forEach(el => {
+            el.disabled = false;
+            el.style.pointerEvents = '';
+            el.style.opacity = '';
+        });
     }
 }
 
@@ -12770,7 +13243,7 @@ function cancelEditing() {
     clearPendingAvatar();
     
     // Re-lock (this also re-renders sidebar tags via setEditLock)
-    setEditLock(true);
+    setEditLock(!getSetting('alwaysEditEnabled'));
     showToast("Changes discarded", "info");
 }
 

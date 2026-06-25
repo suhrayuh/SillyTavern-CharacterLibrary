@@ -3626,6 +3626,62 @@
 
 
 /* ========================================
+   NICKNAME SECTION — MOBILE OVERRIDES
+   ======================================== */
+.cl-nickname-section .nickname-input {
+    height: 40px;
+    padding: 6px 10px;
+    font-size: var(--font-base);
+}
+
+.cl-nickname-section .nickname-save-btn,
+.cl-nickname-section .nickname-clear-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+}
+
+.cl-nickname-section .context-btn {
+    padding: 4px 6px;
+    font-size: var(--font-sm);
+}
+
+.cl-nickname-section .nickname-levels .level-row {
+    font-size: var(--font-sm);
+}
+
+/* ========================================
+   ALT. FIELD BUTTONS & MODAL — MOBILE
+   ======================================== */
+.alt-field-btn {
+    font-size: var(--font-xs);
+    padding: 2px 8px;
+}
+
+.alt-descriptions-modal-content {
+    max-width: 100vw !important;
+    width: 100vw !important;
+    max-height: 100vh !important;
+    height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+}
+
+.alt-entry-top-row {
+    flex-wrap: wrap;
+}
+
+.alt-entry-title {
+    min-width: 100%;
+    margin-bottom: 4px;
+}
+
+.alt-entry-content {
+    font-size: var(--font-sm);
+}
+
+/* ========================================
    LANDSCAPE PHONE
    ======================================== */
 @media screen and (max-width: 900px) and (orientation: landscape) {
