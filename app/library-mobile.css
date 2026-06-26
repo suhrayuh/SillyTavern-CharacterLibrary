@@ -1153,6 +1153,11 @@
         display: none !important;
     }
 
+    /* Exception: keep the greetings modal Apply All button visible */
+    #greetingsModalSave {
+        display: inline-flex !important;
+    }
+
     /* ---------------------------------------------------
        GLOBAL ACTION BUTTONS – compact for mobile
        --------------------------------------------------- */
