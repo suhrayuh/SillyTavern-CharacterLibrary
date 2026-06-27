@@ -18011,7 +18011,25 @@ async function importLocalCharacter(file) {
         if (result.error) {
             throw new Error('Import failed: Server returned error');
         }
-        
+
+        // Import embedded lorebook if the card has one
+        const characterBook = cardData.data?.character_book;
+        if (characterBook?.name && Array.isArray(characterBook?.entries) && characterBook.entries.length > 0) {
+            const worldEntries = {};
+            for (const entry of characterBook.entries) {
+                if (entry.id) {
+                    worldEntries[entry.id] = entry;
+                }
+            }
+            const worldData = { entries: worldEntries, name: characterBook.name };
+            const imported = await window.importWorldInfoData(characterBook.name, worldData);
+            if (imported) {
+                debugLog(`[Local Import] Imported embedded lorebook "${characterBook.name}" with ${Object.keys(worldEntries).length} entries.`);
+            } else {
+                debugLog(`[Local Import] Failed to import embedded lorebook "${characterBook.name}".`);
+            }
+        }
+
         return {
             success: true,
             fileName: result.file_name || file.name,
