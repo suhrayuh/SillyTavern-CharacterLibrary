@@ -17977,49 +17977,87 @@ async function importLocalCharacter(file) {
         const importGalleryPageUrls = typeof window.findCharacterGalleryUrls === 'function'
             ? window.findCharacterGalleryUrls(cardData) : [];
         
+        // Pre-import: if card has an embedded character_book, ensure the world link
+        // is set on the card data BEFORE upload so ST saves it with the character.
+        const characterBook = cardData.data?.character_book;
+        const hasEmbeddedLorebook = characterBook?.name && Array.isArray(characterBook?.entries) && characterBook.entries.length > 0;
+        if (hasEmbeddedLorebook && !cardData.data.extensions.world) {
+            cardData.data.extensions.world = characterBook.name;
+            needsReembed = true;
+            debugLog('[Local Import] Pre-linking embedded lorebook:', characterBook.name);
+        }
+
         // Re-embed updated card data if enrichment or gallery_id changed it
         let pngToUpload = needsReembed ? embedCharacterDataInPng(arrayBuffer, cardData) : arrayBuffer;
-        
+
         // Send to ST's import endpoint
         const uploadFile = new File([pngToUpload], file.name, { type: 'image/png' });
         const formData = new FormData();
         formData.append('avatar', uploadFile);
         formData.append('file_type', 'png');
-        
+
         const csrfToken = getCSRFToken();
-        
+
         const importResponse = await fetch('/api/characters/import', {
             method: 'POST',
             headers: { 'X-CSRF-Token': csrfToken },
             body: formData
         });
-        
+
         const responseText = await importResponse.text();
         debugLog('[Local Import] Response:', importResponse.status, responseText);
-        
+
         if (!importResponse.ok) {
             throw new Error(`Import error: ${responseText}`);
         }
-        
+
         let result;
         try {
             result = JSON.parse(responseText);
         } catch (e) {
             throw new Error(`Invalid JSON response: ${responseText}`);
         }
-        
+
         if (result.error) {
             throw new Error('Import failed: Server returned error');
         }
 
-        // Import embedded lorebook if the card has one
-        const characterBook = cardData.data?.character_book;
-        if (characterBook?.name && Array.isArray(characterBook?.entries) && characterBook.entries.length > 0) {
+        // Import embedded lorebook as a world info file on disk
+        if (hasEmbeddedLorebook) {
             const worldEntries = {};
             for (const entry of characterBook.entries) {
-                if (entry.id) {
-                    worldEntries[entry.id] = entry;
-                }
+                const uid = entry.uid ?? entry.id ?? 0;
+                if (uid === undefined || uid === null) continue;
+                worldEntries[uid] = {
+                    uid: uid,
+                    key: entry.keys ?? entry.key ?? null,
+                    keysecondary: entry.secondary_keys ?? entry.keysecondary ?? null,
+                    comment: entry.comment ?? entry.name ?? '',
+                    content: entry.content ?? '',
+                    constant: entry.constant ?? false,
+                    selective: entry.selective ?? true,
+                    order: entry.insertion_order ?? entry.order ?? 100,
+                    position: entry.position === 'before_char' ? 0 : (entry.position === 'after_char' ? 1 : (entry.position ?? 0)),
+                    disable: entry.enabled === false ? true : (entry.disable ?? false),
+                    excludeRecursion: entry.extensions?.exclude_recursion ?? entry.excludeRecursion ?? false,
+                    preventRecursion: entry.extensions?.prevent_recursion ?? entry.preventRecursion ?? false,
+                    delayUntilRecursion: entry.extensions?.delay_until_recursion ?? entry.delayUntilRecursion ?? false,
+                    probability: entry.extensions?.probability ?? entry.probability ?? null,
+                    useProbability: entry.extensions?.useProbability ?? entry.useProbability ?? false,
+                    depth: entry.extensions?.depth ?? entry.depth ?? 4,
+                    selectiveLogic: entry.extensions?.selectiveLogic ?? entry.selectiveLogic ?? 0,
+                    group: entry.extensions?.group ?? entry.group ?? '',
+                    groupOverride: entry.extensions?.group_override ?? entry.groupOverride ?? false,
+                    groupWeight: entry.extensions?.group_weight ?? entry.groupWeight ?? null,
+                    scanDepth: entry.extensions?.scan_depth ?? entry.scanDepth ?? null,
+                    caseSensitive: entry.extensions?.case_sensitive ?? null,
+                    matchWholeWords: entry.extensions?.match_whole_words ?? null,
+                    automationId: entry.extensions?.automation_id ?? '',
+                    role: entry.extensions?.role ?? null,
+                    stagger: entry.extensions?.stagger ?? null,
+                    vectorized: entry.extensions?.vectorized ?? false,
+                    extensions: entry.extensions ?? {},
+                };
             }
             const worldData = { entries: worldEntries, name: characterBook.name };
             const imported = await window.importWorldInfoData(characterBook.name, worldData);
