@@ -18023,11 +18023,14 @@ async function importLocalCharacter(file) {
         }
 
         // Import embedded lorebook as a world info file on disk
+        // Reverse of ST's convertWorldInfoToCharacterBook() — maps V2/V3
+        // character_book entry fields back to native ST world info format.
         if (hasEmbeddedLorebook) {
             const worldEntries = {};
             for (const entry of characterBook.entries) {
                 const uid = entry.uid ?? entry.id ?? 0;
                 if (uid === undefined || uid === null) continue;
+                const ext = entry.extensions ?? {};
                 worldEntries[uid] = {
                     uid: uid,
                     key: entry.keys ?? entry.key ?? null,
@@ -18037,26 +18040,46 @@ async function importLocalCharacter(file) {
                     constant: entry.constant ?? false,
                     selective: entry.selective ?? true,
                     order: entry.insertion_order ?? entry.order ?? 100,
-                    position: entry.position === 'before_char' ? 0 : (entry.position === 'after_char' ? 1 : (entry.position ?? 0)),
+                    // extensions.position is the REAL numeric position (0-7).
+                    // Fall back to converting the V2 string only if extensions is absent.
+                    position: typeof ext.position === 'number'
+                        ? ext.position
+                        : (entry.position === 'before_char' ? 0 : (entry.position === 'after_char' ? 1 : (entry.position ?? 0))),
                     disable: entry.enabled === false ? true : (entry.disable ?? false),
-                    excludeRecursion: entry.extensions?.exclude_recursion ?? entry.excludeRecursion ?? false,
-                    preventRecursion: entry.extensions?.prevent_recursion ?? entry.preventRecursion ?? false,
-                    delayUntilRecursion: entry.extensions?.delay_until_recursion ?? entry.delayUntilRecursion ?? false,
-                    probability: entry.extensions?.probability ?? entry.probability ?? null,
-                    useProbability: entry.extensions?.useProbability ?? entry.useProbability ?? false,
-                    depth: entry.extensions?.depth ?? entry.depth ?? 4,
-                    selectiveLogic: entry.extensions?.selectiveLogic ?? entry.selectiveLogic ?? 0,
-                    group: entry.extensions?.group ?? entry.group ?? '',
-                    groupOverride: entry.extensions?.group_override ?? entry.groupOverride ?? false,
-                    groupWeight: entry.extensions?.group_weight ?? entry.groupWeight ?? null,
-                    scanDepth: entry.extensions?.scan_depth ?? entry.scanDepth ?? null,
-                    caseSensitive: entry.extensions?.case_sensitive ?? null,
-                    matchWholeWords: entry.extensions?.match_whole_words ?? null,
-                    automationId: entry.extensions?.automation_id ?? '',
-                    role: entry.extensions?.role ?? null,
-                    stagger: entry.extensions?.stagger ?? null,
-                    vectorized: entry.extensions?.vectorized ?? false,
-                    extensions: entry.extensions ?? {},
+                    use_regex: entry.use_regex ?? true,
+                    // Flatten extension fields to top-level ST world info fields
+                    excludeRecursion: ext.exclude_recursion ?? entry.excludeRecursion ?? false,
+                    displayIndex: ext.display_index ?? entry.displayIndex ?? uid,
+                    probability: ext.probability ?? entry.probability ?? null,
+                    useProbability: ext.useProbability ?? entry.useProbability ?? false,
+                    depth: ext.depth ?? entry.depth ?? 4,
+                    selectiveLogic: ext.selectiveLogic ?? entry.selectiveLogic ?? 0,
+                    outletName: ext.outlet_name ?? entry.outletName ?? '',
+                    group: ext.group ?? entry.group ?? '',
+                    groupOverride: ext.group_override ?? entry.groupOverride ?? false,
+                    groupWeight: ext.group_weight ?? entry.groupWeight ?? null,
+                    useGroupScoring: ext.use_group_scoring ?? entry.useGroupScoring ?? false,
+                    preventRecursion: ext.prevent_recursion ?? entry.preventRecursion ?? false,
+                    delayUntilRecursion: ext.delay_until_recursion ?? entry.delayUntilRecursion ?? false,
+                    scanDepth: ext.scan_depth ?? entry.scanDepth ?? null,
+                    matchWholeWords: ext.match_whole_words ?? entry.matchWholeWords ?? null,
+                    caseSensitive: ext.case_sensitive ?? entry.caseSensitive ?? null,
+                    automationId: ext.automation_id ?? entry.automationId ?? '',
+                    role: ext.role ?? entry.role ?? 0,
+                    vectorized: ext.vectorized ?? entry.vectorized ?? false,
+                    sticky: ext.sticky ?? entry.sticky ?? null,
+                    cooldown: ext.cooldown ?? entry.cooldown ?? null,
+                    delay: ext.delay ?? entry.delay ?? null,
+                    matchPersonaDescription: ext.match_persona_description ?? false,
+                    matchCharacterDescription: ext.match_character_description ?? false,
+                    matchCharacterPersonality: ext.match_character_personality ?? false,
+                    matchCharacterDepthPrompt: ext.match_character_depth_prompt ?? false,
+                    matchScenario: ext.match_scenario ?? false,
+                    matchCreatorNotes: ext.match_creator_notes ?? false,
+                    triggers: ext.triggers ?? [],
+                    ignoreBudget: ext.ignore_budget ?? false,
+                    // Preserve the raw extensions object too
+                    extensions: ext,
                 };
             }
             const worldData = { entries: worldEntries, name: characterBook.name };
