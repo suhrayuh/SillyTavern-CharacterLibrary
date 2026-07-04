@@ -18098,6 +18098,17 @@ async function importLocalCharacter(file) {
             const imported = await window.importWorldInfoData(characterBook.name, worldData);
             if (imported) {
                 debugLog(`[Local Import] Imported embedded lorebook "${characterBook.name}" with ${Object.keys(worldEntries).length} entries.`);
+                // Refresh ST's world info dropdown so the new lorebook appears immediately.
+                // CL writes the .json via /api/worldinfo/edit but never tells ST to reload world_names.
+                try { await window.updateWorldInfoList?.(); } catch (_) {}
+                // Also assign the world to the character in ST's internal state so vanilla ST
+                // knows the embedded lorebook has already been imported (prevents the duplicate
+                // "import card lore" prompt when viewing the character outside CL).
+                try {
+                    if (result.file_name && typeof window.assignCharacterWorld === 'function') {
+                        await window.assignCharacterWorld(result.file_name, characterBook.name);
+                    }
+                } catch (_) {}
             } else {
                 debugLog(`[Local Import] Failed to import embedded lorebook "${characterBook.name}".`);
             }
@@ -28401,6 +28412,59 @@ window.importWorldInfoData = async function(worldName, worldData) {
     if (!worldName || !worldData || typeof worldData !== 'object') return false;
     if (!worldData.entries || typeof worldData.entries !== 'object') return false;
     return window.saveWorldInfoData(worldName, worldData);
+};
+
+/**
+ * Refresh ST's internal world_names array and dropdown UI.
+ * ST exposes updateWorldInfoList via SillyTavern.getContext(). This wrapper
+ * calls it if available so newly created/imported worlds appear immediately
+ * in the WI editor and character world picker without a page reload.
+ * @returns {Promise<void>}
+ */
+window.updateWorldInfoList = async function() {
+    try {
+        const ctx = window.getSTContext?.() || SillyTavern?.getContext?.();
+        if (typeof ctx?.updateWorldInfoList === 'function') {
+            await ctx.updateWorldInfoList();
+        }
+    } catch (e) {
+        console.warn('[updateWorldInfoList] Could not refresh ST world list:', e);
+    }
+};
+
+/**
+ * Assign a world file as the primary lorebook for a character in ST's internal
+ * state. This sets characters[chid].data.extensions.world and saves the character,
+ * so vanilla ST knows the embedded lorebook has already been imported and won't
+ * prompt the user with "import card lore" when they view the character outside CL.
+ * @param {string} avatar - Character avatar filename
+ * @param {string} worldName - World/lorebook name to assign
+ * @returns {Promise<boolean>} Success
+ */
+window.assignCharacterWorld = async function(avatar, worldName) {
+    if (!avatar || !worldName) return false;
+    try {
+        const ctx = window.getSTContext?.() || SillyTavern?.getContext?.();
+        const characters = ctx?.characters;
+        if (!Array.isArray(characters)) return false;
+
+        const chid = characters.findIndex(c => c?.avatar === avatar);
+        if (chid === -1) return false;
+
+        // Update in-memory character so vanilla ST won't prompt "import card lore"
+        // for a character CL already imported. The card on disk already has the
+        // world link (CL pre-links it before upload), so the next page load will
+        // also see the correct state. This sync is for the current session only.
+        const char = characters[chid];
+        if (!char.data) char.data = {};
+        if (!char.data.extensions) char.data.extensions = {};
+        char.data.extensions.world = worldName;
+
+        return true;
+    } catch (e) {
+        console.warn('[assignCharacterWorld] Could not assign world:', e);
+        return false;
+    }
 };
 
 /**
