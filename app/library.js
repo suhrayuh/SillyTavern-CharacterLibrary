@@ -13864,6 +13864,11 @@ async function unlinkLorebookFromCharacter() {
     if (!ok) return;
     const success = await applyCardFieldUpdates(activeChar.avatar, { 'extensions.world': '' }, { awaitNotify: true });
     if (!success) { showToast('Failed to unlink lorebook', 'error'); return; }
+    // Update the in-memory activeChar so the UI refresh below sees the new state.
+    if (activeChar.data) {
+        if (!activeChar.data.extensions) activeChar.data.extensions = {};
+        activeChar.data.extensions.world = '';
+    }
     // Refresh the Edit-tab buttons and the detail-modal Linked Lorebook box.
     populateLorebookEditor(activeChar.data?.character_book || activeChar.character_book);
     populateLinkedLorebookBox(activeChar);
@@ -13936,7 +13941,14 @@ async function linkLorebookToCharacter(fileId) {
     if (current === fileId) { closeLinkLorebookPicker(); return; }
     const success = await applyCardFieldUpdates(activeChar.avatar, { 'extensions.world': fileId }, { awaitNotify: true });
     if (!success) { showToast('Failed to link lorebook', 'error'); return; }
+    // Update the in-memory activeChar so the UI refresh below sees the new state.
+    if (activeChar.data) {
+        if (!activeChar.data.extensions) activeChar.data.extensions = {};
+        activeChar.data.extensions.world = fileId;
+    }
     closeLinkLorebookPicker();
+    // Invalidate the render cache for the new world so entries are fetched fresh.
+    window.invalidateLinkedWorldRenderCache?.(fileId);
     populateLorebookEditor(activeChar.data?.character_book || activeChar.character_book);
     populateLinkedLorebookBox(activeChar);
     showToast(`Linked "${fileId}".`, 'success', 5000);
