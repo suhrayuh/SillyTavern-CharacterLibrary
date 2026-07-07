@@ -400,6 +400,11 @@ class DatacatProvider extends ProviderBase {
 
     getCharacterUrl(linkInfo) {
         if (!linkInfo?.id) return null;
+        // Saucepan characters (especially natively-extracted ones) may not
+        // exist on DataCat, so link to their actual source page.
+        if (linkInfo.sourceKind === 'saucepan') {
+            return `https://saucepan.ai/companion/${linkInfo.id}`;
+        }
         return `https://datacat.run/characters/${linkInfo.id}`;
     }
 
