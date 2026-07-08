@@ -400,6 +400,13 @@ export async function importFromPng({
         characterCard.data.name = characterCard.data.name.substring(0, 128).trimEnd();
     }
 
+    // Strip empty/whitespace-only tags before embedding — prevents ghost tags on import.
+    if (characterCard?.data?.tags && Array.isArray(characterCard.data.tags)) {
+        characterCard.data.tags = characterCard.data.tags
+            .map(t => String(t || '').trim())
+            .filter(t => t.length > 0);
+    }
+
     const safeName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
 
     let pngBuffer = await ensurePng(imageBuffer, api);
@@ -476,6 +483,78 @@ export async function importFromPng({
     const galleryPageUrls = typeof window.findCharacterGalleryUrls === 'function'
         ? window.findCharacterGalleryUrls(characterCard) : [];
     const galleryId = characterCard.data.extensions?.gallery_id || null;
+
+    // Auto-import embedded lorebook (character_book) as a world info file.
+    // This mirrors the logic in importLocalCharacter() — converts V2 entries
+    // to ST world info format, creates the .json, links it to the character,
+    // and refreshes ST's world info list so the lorebook is immediately usable.
+    const characterBook = characterCard?.data?.character_book;
+    if (characterBook?.entries && Array.isArray(characterBook.entries) && characterBook.entries.length > 0) {
+        try {
+            const bookName = characterBook.name || `${characterCard.data?.name || characterName}'s Lorebook`;
+            const stEntries = {};
+            characterBook.entries.forEach((entry, i) => {
+                const ext = entry.extensions || {};
+                const uid = entry.id ?? i;
+                stEntries[uid] = {
+                    uid,
+                    key: Array.isArray(entry.keys) ? entry.keys : [],
+                    keysecondary: Array.isArray(entry.secondary_keys) ? entry.secondary_keys : [],
+                    comment: entry.comment || entry.name || '',
+                    content: entry.content || '',
+                    constant: entry.constant ?? false,
+                    selective: entry.selective ?? true,
+                    order: entry.insertion_order ?? entry.order ?? 100,
+                    position: ext.position ?? (entry.position === 'after_char' ? 1 : 0),
+                    disable: entry.enabled === false,
+                    use_regex: entry.use_regex ?? false,
+                    exclude_recursion: ext.exclude_recursion ?? false,
+                    prevent_recursion: ext.prevent_recursion ?? false,
+                    delay_until_recursion: ext.delay_until_recursion ?? false,
+                    probability: ext.probability ?? 100,
+                    useProbability: ext.useProbability ?? true,
+                    depth: ext.depth ?? 4,
+                    selectiveLogic: ext.selectiveLogic ?? 0,
+                    outletName: ext.outlet_name ?? '',
+                    group: ext.group ?? '',
+                    group_override: ext.group_override ?? false,
+                    group_weight: ext.group_weight ?? 100,
+                    scan_depth: ext.scan_depth ?? null,
+                    match_whole_words: ext.match_whole_words ?? null,
+                    use_group_scoring: ext.use_group_scoring ?? false,
+                    case_sensitive: ext.case_sensitive ?? null,
+                    automation_id: ext.automation_id ?? '',
+                    role: ext.role ?? 0,
+                    vectorized: ext.vectorized ?? false,
+                    sticky: ext.sticky ?? 0,
+                    cooldown: ext.cooldown ?? 0,
+                    delay: ext.delay ?? 0,
+                    match_persona_description: ext.match_persona_description ?? false,
+                    match_character_description: ext.match_character_description ?? false,
+                    match_character_personality: ext.match_character_personality ?? false,
+                    match_character_depth_prompt: ext.match_character_depth_prompt ?? false,
+                    match_scenario: ext.match_scenario ?? false,
+                    match_creator_notes: ext.match_creator_notes ?? false,
+                    triggers: ext.triggers ?? [],
+                    ignoreBudget: ext.ignore_budget ?? false,
+                    displayIndex: ext.display_index ?? i,
+                    useGroupScoring: ext.use_group_scoring ?? false,
+                    characterFilter: ext.character_filter ?? { isExclude: false, names: [], tags: [] },
+                };
+            });
+            const worldData = { entries: stEntries };
+            const imported = await window.importWorldInfoData?.(bookName, worldData);
+            if (imported) {
+                await window.updateWorldInfoList?.();
+                if (result.file_name) {
+                    await window.assignCharacterWorld?.(result.file_name, bookName);
+                }
+                api.showToast?.(`Imported lorebook "${bookName}" with ${characterBook.entries.length} entries.`, 'success', 5000);
+            }
+        } catch (e) {
+            console.warn('[Import] Lorebook auto-import failed:', e?.message || e);
+        }
+    }
 
     return {
         success: true,

@@ -1456,6 +1456,9 @@ const SAUCEPAN_ALLOWED_PATHS = [
     /^\/api\/v1\/companions-of-user$/,
     /^\/api\/v1\/companion$/,
     /^\/api\/v1\/companion\/definition$/,
+    /^\/api\/v1\/companions\/[^/]+\/lorebooks$/,
+    /^\/api\/v2\/lorebooks\/[^/]+\/chapters$/,
+    /^\/api\/v2\/lorebooks\/[^/]+\/chapters\/[^/]+$/,
     /^\/cdn\/.+$/,
 ];
 const SAUCEPAN_POST_PATH = '/api/v1/search';
@@ -1818,6 +1821,81 @@ function registerSaucepanRoutes(router) {
             res.json({ success: true, companionId, assembled, greetings });
         } catch (err) {
             console.error('[cl-helper] Saucepan extract error:', err.message);
+            res.status(502).json({ error: `Failed to reach Saucepan: ${err.message}` });
+        }
+    });
+
+    // Native Saucepan lorebook extraction: fetches a companion's linked
+    // lorebooks, then each lorebook's chapters, reassembles the fragment-
+    // obfuscated chapter text, and returns structured V2 character_book entries.
+    router.post('/saucepan-lorebook', async (req, res) => {
+        const bodyToken = typeof req.body?.token === 'string' && req.body.token.length <= 2048
+            ? req.body.token.trim()
+            : null;
+        const token = bodyToken || saucepanToken;
+        if (!token) {
+            return res.status(401).json({ error: 'No Saucepan token configured' });
+        }
+
+        const companionId = typeof req.body?.companionId === 'string'
+            ? req.body.companionId.trim()
+            : null;
+        if (!companionId || companionId.length > 128) {
+            return res.status(400).json({ error: 'companionId string is required' });
+        }
+
+        try {
+            // 1. Fetch linked lorebooks list
+            const lbRes = await fetchSaucepanJson(
+                `/api/v1/companions/${encodeURIComponent(companionId)}/lorebooks`,
+                token,
+                companionId,
+            );
+            if (!lbRes.ok) {
+                const msg = lbRes.data?.error?.message || `Saucepan HTTP ${lbRes.status}`;
+                return res.status(lbRes.status).json({ error: msg });
+            }
+            const lorebooks = Array.isArray(lbRes.data?.lorebooks) ? lbRes.data.lorebooks : [];
+            if (lorebooks.length === 0) {
+                return res.json({ success: true, lorebook: null });
+            }
+
+            // 2. Fetch chapters for each lorebook, then reassemble each chapter's fragments
+            const entries = [];
+            for (const lorebook of lorebooks) {
+                const chaptersRes = await fetchSaucepanJson(
+                    `/api/v2/lorebooks/${encodeURIComponent(lorebook.id)}/chapters`,
+                    token,
+                    companionId,
+                );
+                if (!chaptersRes.ok) continue;
+                const chapters = Array.isArray(chaptersRes.data?.chapters) ? chaptersRes.data.chapters : [];
+
+                for (const chapterMeta of chapters) {
+                    const chRes = await fetchSaucepanJson(
+                        `/api/v2/lorebooks/${encodeURIComponent(lorebook.id)}/chapters/${encodeURIComponent(chapterMeta.index)}`,
+                        token,
+                        companionId,
+                    );
+                    if (!chRes.ok || !chRes.data) continue;
+                    const chapter = chRes.data;
+                    const content = assembleSaucepanFragments(chapter?.text_fragments);
+                    if (!content || !content.trim()) continue;
+                    entries.push({
+                        content,
+                        title: chapter?.title || chapterMeta?.title || '',
+                        index: chapter?.index ?? chapterMeta?.index ?? entries.length,
+                    });
+                }
+            }
+
+            const name = lorebooks.length === 1
+                ? (lorebooks[0].name || 'Saucepan Lorebook')
+                : 'Saucepan Lorebooks';
+
+            res.json({ success: true, lorebook: { name, entries } });
+        } catch (err) {
+            console.error('[cl-helper] Saucepan lorebook error:', err.message);
             res.status(502).json({ error: `Failed to reach Saucepan: ${err.message}` });
         }
     });

@@ -36,6 +36,7 @@ import {
     fetchSaucepanCompanion,
     fetchSaucepanCompanionsOfUser,
     fetchSaucepanV2Card,
+    fetchSaucepanLorebookList,
     buildSaucepanCharacterFromHit,
     hasSaucepanToken,
     resolveSaucepanImageUrl,
@@ -2808,10 +2809,24 @@ async function fetchAndPopulateDetails(hit, token) {
             }
         }
 
-        // Linked lorebooks (external, metadata-only). DataCat stores attached
-        // lorebooks/scripts on `character.scripts[]`. Their entries are not
-        // reachable through cl-helper, so this is a heads-up surface only
-        renderDatacatLorebooks(character.scripts);
+        // Linked lorebooks (metadata-only display).
+        // DataCat stores attached lorebooks/scripts on `character.scripts[]`.
+        // Saucepan characters don't have `scripts[]`, so fetch lorebook names
+        // from the Saucepan API when the hit is saucepan-sourced and has any.
+        if (charIsSaucepan && hit?.character_id) {
+            try {
+                const saucepanLorebooks = await fetchSaucepanLorebookList(hit.character_id);
+                if (saucepanLorebooks.length > 0) {
+                    renderDatacatLorebooks(saucepanLorebooks);
+                } else {
+                    renderDatacatLorebooks(character.scripts);
+                }
+            } catch (_) {
+                renderDatacatLorebooks(character.scripts);
+            }
+        } else {
+            renderDatacatLorebooks(character.scripts);
+        }
 
         // Saucepan portraits gallery
         const portraits = character?.companion_snapshot?.portraits;

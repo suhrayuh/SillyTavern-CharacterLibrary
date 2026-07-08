@@ -469,6 +469,53 @@ function prepareCharacterKeys(chars) {
 }
 
 // ========================================
+// CHAT COUNT CACHE (for "Most/Least Chats" sort)
+// ========================================
+
+// Maps avatar filename → number of chat sessions.
+// Populated lazily when the user selects chats_most / chats_least sort.
+const _chatCountCache = new Map();
+let _chatCountLoading = false;
+
+/**
+ * Lazy-load chat counts for all characters via batched API calls.
+ * Caches results in _chatCountCache so subsequent sorts are instant.
+ * Characters with unknown counts are treated as 0 until loaded.
+ */
+async function ensureChatCountsLoaded() {
+    if (_chatCountCache.size > 0 || _chatCountLoading) return;
+    _chatCountLoading = true;
+    const BATCH_SIZE = 5;
+    const avatars = allCharacters.map(c => c.avatar).filter(Boolean);
+    for (let i = 0; i < avatars.length; i += BATCH_SIZE) {
+        const batch = avatars.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (avatar) => {
+            try {
+                // Request full chat info (not simple) to get chat_items per file.
+                // Sum across all chat sessions for total message count.
+                const response = await apiRequest(ENDPOINTS.CHARACTERS_CHATS, 'POST', { avatar_url: avatar });
+                const chats = response.ok ? await response.json() : [];
+                if (Array.isArray(chats)) {
+                    const totalMessages = chats.reduce((sum, chat) => sum + (chat.chat_items || 0), 0);
+                    _chatCountCache.set(avatar, totalMessages);
+                } else {
+                    _chatCountCache.set(avatar, 0);
+                }
+            } catch {
+                _chatCountCache.set(avatar, 0);
+            }
+        }));
+    }
+    _chatCountLoading = false;
+}
+
+/** Get cached chat count for a character (0 if not loaded yet). */
+function getChatCount(char) {
+    if (!char?.avatar) return 0;
+    return _chatCountCache.get(char.avatar) ?? 0;
+}
+
+// ========================================
 // SETTINGS PERSISTENCE SYSTEM
 // Uses SillyTavern's extensionSettings via main window for server-side storage
 // Falls back to localStorage if main window unavailable
@@ -8108,11 +8155,13 @@ function processAndRender(data) {
             if (sortType === 'date_old') return a._dateAdded - b._dateAdded;
             if (sortType === 'created_new') return b._createDate - a._createDate;
             if (sortType === 'created_old') return a._createDate - b._createDate;
+            if (sortType === 'chats_most') return getChatCount(b) - getChatCount(a);
+            if (sortType === 'chats_least') return getChatCount(a) - getChatCount(b);
             if (sortType === 'random') return getRandomSortKey(a) - getRandomSortKey(b);
             return 0;
         });
     }
-    
+
     document.getElementById('loading').style.display = 'none';
 
     // Load signal for modules that defer work until characters exist (fires
@@ -8372,9 +8421,11 @@ function clearAllTagFilters() {
 }
 
 function getTags(char) {
-    if (Array.isArray(char.tags)) return char.tags;
-    if (char.data && Array.isArray(char.data.tags)) return char.data.tags;
-    return [];
+    const raw = Array.isArray(char.tags) ? char.tags
+        : (char.data && Array.isArray(char.data.tags)) ? char.data.tags
+        : [];
+    // Filter empty/whitespace-only tags so they never show anywhere.
+    return raw.filter(t => typeof t === 'string' && t.trim().length > 0);
 }
 
 // ========================================
@@ -10680,12 +10731,13 @@ async function populateEditPane() {
     const creatorNotesEdit = char.creator_notes || (char.data ? char.data.creator_notes : "") || "";
     const charVersion = char.character_version || (char.data ? char.data.character_version : "") || "";
 
-    // Tags: always store as array, never as comma-delimited string
+    // Tags: always store as array, never as comma-delimited string.
+    // Filter out empty/whitespace-only tags that sneak in from various import sources.
     const rawTags = char.tags || (char.data ? char.data.tags : []) || [];
     if (Array.isArray(rawTags)) {
-        _editTagsArray = [...rawTags];
+        _editTagsArray = rawTags.map(t => String(t || '').trim()).filter(Boolean);
     } else if (typeof rawTags === "string") {
-        _editTagsArray = rawTags.split(',').map(t => t.trim()).filter(t => t);
+        _editTagsArray = rawTags.split(',').map(t => t.trim()).filter(Boolean);
     } else {
         _editTagsArray = [];
     }
@@ -15897,6 +15949,8 @@ function performSearch() {
         if (sortType === 'date_old') return a._dateAdded - b._dateAdded;
         if (sortType === 'created_new') return b._createDate - a._createDate;
         if (sortType === 'created_old') return a._createDate - b._createDate;
+        if (sortType === 'chats_most') return getChatCount(b) - getChatCount(a);
+        if (sortType === 'chats_least') return getChatCount(a) - getChatCount(b);
         if (sortType === 'random') return getRandomSortKey(a) - getRandomSortKey(b);
         return 0;
     });
@@ -16387,8 +16441,15 @@ function setupEventListeners() {
     // Sort - delegate to performSearch so there is ONE sort+render codepath.
     // This eliminates the dual-sort bug where the sort handler and performSearch
     // could produce different results from stale/divergent data.
-    on('sortSelect', 'change', (e) => {
+    on('sortSelect', 'change', async (e) => {
         if (e?.target?.value === 'random') reshuffleRandomSort();
+        // Chat count sorts need async pre-loading — fetch counts then re-render.
+        if (e?.target?.value === 'chats_most' || e?.target?.value === 'chats_least') {
+            if (_chatCountCache.size === 0 && !_chatCountLoading) {
+                showToast('Loading chat counts...', 'info', 3000);
+                await ensureChatCountsLoaded();
+            }
+        }
         performSearch();
     });
     
