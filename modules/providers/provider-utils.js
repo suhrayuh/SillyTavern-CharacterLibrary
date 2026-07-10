@@ -407,6 +407,17 @@ export async function importFromPng({
             .filter(t => t.length > 0);
     }
 
+    // Pre-link the lorebook onto the card BEFORE embedCharacterDataInPng so the
+    // link is baked into the uploaded PNG (ST's /api/characters/import persists
+    // data.extensions.world from the card). Must run before the embed at ~419.
+    const _cb = characterCard?.data?.character_book;
+    const _hasBook = _cb?.name && Array.isArray(_cb?.entries) && _cb.entries.length > 0;
+    if (_hasBook) {
+        const _bookName = _cb.name || `${characterCard.data?.name || fileName}'s Lorebook`;
+        if (characterCard.data && !characterCard.data.extensions) characterCard.data.extensions = {};
+        if (characterCard.data?.extensions) characterCard.data.extensions.world = _bookName;
+    }
+
     const safeName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
 
     let pngBuffer = await ensurePng(imageBuffer, api);
@@ -546,8 +557,9 @@ export async function importFromPng({
             const imported = await window.importWorldInfoData?.(bookName, worldData);
             if (imported) {
                 await window.updateWorldInfoList?.();
+                // Also sync in-memory ST state so the picker reflects the link this session.
                 if (result.file_name) {
-                    await window.assignCharacterWorld?.(result.file_name, bookName);
+                    try { await window.assignCharacterWorld?.(result.file_name, bookName); } catch (_) {}
                 }
                 api.showToast?.(`Imported lorebook "${bookName}" with ${characterBook.entries.length} entries.`, 'success', 5000);
             }
