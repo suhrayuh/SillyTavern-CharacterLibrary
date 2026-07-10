@@ -10463,7 +10463,7 @@ async function openModal(char, { navList } = {}) {
         document.getElementById('modalFirstMes').innerHTML = formatRichText(firstMes, char.name);
 
         // Alternate Greetings
-        const altGreetings = char.alternate_greetings || (char.data ? char.data.alternate_greetings : []) || [];
+        const altGreetings = (char.data?.alternate_greetings ?? char.alternate_greetings) ?? [];
         const altBox = document.getElementById('modalAltGreetingsBox');
 
         // Store raw content for fullscreen expand feature
@@ -10489,7 +10489,7 @@ async function openModal(char, { navList } = {}) {
         applyMediaLocalizationToModal(char, desc, firstMes, altGreetings, creatorNotes, gen);
 
         // Embedded Lorebook
-        const characterBook = char.character_book || (char.data ? char.data.character_book : null);
+        const characterBook = (char.data?.character_book ?? char.character_book) ?? null;
         const lorebookBox = document.getElementById('modalLorebookBox');
 
         if (lorebookBox) {
@@ -10757,11 +10757,11 @@ async function populateEditPane() {
     document.getElementById('editCreatorNotes').value = creatorNotesEdit;
 
     // Populate alternate greetings editor
-    const altGreetings = char.alternate_greetings || (char.data ? char.data.alternate_greetings : []) || [];
+    const altGreetings = (char.data?.alternate_greetings ?? char.alternate_greetings) ?? [];
     populateAltGreetingsEditor(altGreetings);
 
     // Populate lorebook editor
-    const characterBook = char.character_book || (char.data ? char.data.character_book : null);
+    const characterBook = (char.data?.character_book ?? char.character_book) ?? null;
     populateLorebookEditor(characterBook);
 
     // Store raw data for cancel/restore
@@ -10788,7 +10788,8 @@ async function populateEditPane() {
         post_history_instructions: document.getElementById('editPostHistoryInstructions').value,
         creator_notes: document.getElementById('editCreatorNotes').value,
         alternate_greetings: getAltGreetingsFromEditor(),
-        character_book: getCharacterBookFromEditor()
+        character_book: getCharacterBookFromEditor(),
+        altFields: collectAltFieldsSnapshot()
     };
 
     // Lock edit fields by default (must come after editor population so dynamic elements are locked)
@@ -11079,6 +11080,16 @@ function getAltFieldData(saveKey) {
     if (!activeChar) return [];
     // Read directly from CL's hydrated character data (not ST parent context)
     return activeChar?.data?.extensions?.alternate_fields?.[saveKey] || [];
+}
+
+// Snapshot every alternate-fields array (extensions.alternate_fields.*) for diff comparison.
+function collectAltFieldsSnapshot() {
+    const out = {};
+    for (const cfg of ALT_FIELD_CONFIGS) {
+        const arr = (activeChar?.data?.extensions?.alternate_fields?.[cfg.saveKey]) || [];
+        out[cfg.saveKey] = (Array.isArray(arr) ? arr : [arr]).map(s => String(s ?? ''));
+    }
+    return out;
 }
 
 function saveAltFieldData(saveKey, entries) {
@@ -11378,13 +11389,13 @@ function populateInfoTab(char) {
     const { embeddedUrls: sidebarEmbeddedUrls, lorebookUrls: sidebarLorebookUrls } = findCharacterMediaUrls(char, { split: true });
     
     // Get lorebook info
-    const characterBook = char.character_book || char.data?.character_book;
+    const characterBook = char.data?.character_book ?? char.character_book;
     const lorebookEntries = characterBook?.entries?.length || 0;
     // Linked external world file (primary link) lives on the card at data.extensions.world.
     const linkedWorld = char.data?.extensions?.world || '';
     
     // Get alternate greetings count
-    const altGreetings = char.alternate_greetings || char.data?.alternate_greetings || [];
+    const altGreetings = (char.data?.alternate_greetings ?? char.alternate_greetings) ?? [];
     
     // Build HTML
     let html = '';
@@ -12582,7 +12593,8 @@ function collectEditValues() {
         post_history_instructions: document.getElementById('editPostHistoryInstructions').value,
         creator_notes: document.getElementById('editCreatorNotes').value,
         alternate_greetings: getAltGreetingsFromEditor(),
-        character_book: getCharacterBookFromEditor()
+        character_book: getCharacterBookFromEditor(),
+        altFields: collectAltFieldsSnapshot()
     };
 }
 
@@ -12605,7 +12617,8 @@ function generateChangesDiff(original, current) {
         post_history_instructions: 'Post-History Instructions',
         creator_notes: "Creator's Notes",
         alternate_greetings: 'Alternate Greetings',
-        character_book: 'Embedded Lorebook'
+        character_book: 'Embedded Lorebook',
+        altFields: 'Alternate Fields'
     };
     
     // Helper to normalize string values for comparison
@@ -12698,6 +12711,24 @@ function generateChangesDiff(original, current) {
                     old: oldSummary,
                     new: newSummary
                 });
+            }
+            continue;
+        }
+        
+        // Alternate-fields (extensions.alternate_fields.*) comparison
+        if (key === 'altFields') {
+            for (const cfg of ALT_FIELD_CONFIGS) {
+                const oldArr = (original[key] && original[key][cfg.saveKey]) || [];
+                const newArr = (current[key] && current[key][cfg.saveKey]) || [];
+                const normOld = oldArr.map(s => String(s || '').replace(/\r\n/g, '\n').trim());
+                const normNew = newArr.map(s => String(s || '').replace(/\r\n/g, '\n').trim());
+                if (JSON.stringify(normOld) !== JSON.stringify(normNew)) {
+                    changes.push({
+                        field: 'Alternate ' + cfg.label,
+                        old: normOld.map((g, i) => `#${i + 1}: ${g}`).join('\n') || '(none)',
+                        new: normNew.map((g, i) => `#${i + 1}: ${g}`).join('\n') || '(none)'
+                    });
+                }
             }
             continue;
         }
@@ -12864,8 +12895,30 @@ function showSaveConfirmation() {
     const changes = generateChangesDiff(originalValues, currentValues);
     const hasAvatarChange = !!pendingAvatarFile;
     
+    // No detected field diffs: some edits (linked lorebook, alternate fields autosave) persist without
+    // a diff. Skip the confirm modal and just proceed so the bottom-right 'saved' toast fires — the user
+    // gets confirmation without an empty/pointless change list.
     if (changes.length === 0 && !hasAvatarChange) {
-        showToast("No changes detected", "info");
+        const activeNs = window.ProviderRegistry?.getActiveTaglineNamespace?.(activeChar) ?? 'cl';
+        pendingUpdates = {
+            name: currentValues.name,
+            description: currentValues.description,
+            first_mes: currentValues.first_mes,
+            personality: currentValues.personality,
+            scenario: currentValues.scenario,
+            mes_example: currentValues.mes_example,
+            system_prompt: currentValues.system_prompt,
+            post_history_instructions: currentValues.post_history_instructions,
+            creator_notes: currentValues.creator_notes,
+            creator: currentValues.creator,
+            character_version: currentValues.character_version,
+            tags: currentValues.tagsArray,
+            alternate_greetings: currentValues.alternate_greetings,
+            character_book: currentValues.character_book,
+            [`extensions.${activeNs}.tagline`]: currentValues.tagline ?? '',
+            [`extensions.${activeNs}.pageName`]: currentValues.listingName ?? '',
+        };
+        performSave();
         return;
     }
 
@@ -13139,7 +13192,7 @@ function refreshModalDisplay() {
     document.getElementById('modalFirstMes').innerHTML = formatRichText(firstMes, char.name);
     
     // Update Alternate Greetings
-    const altGreetings = char.alternate_greetings || (char.data ? char.data.alternate_greetings : []) || [];
+    const altGreetings = (char.data?.alternate_greetings ?? char.alternate_greetings) ?? [];
     const altBox = document.getElementById('modalAltGreetingsBox');
     
     // Store raw content for fullscreen expand feature
@@ -13161,7 +13214,7 @@ function refreshModalDisplay() {
     initContentExpandHandlers();
     
     // Update Embedded Lorebook
-    const characterBook = char.character_book || (char.data ? char.data.character_book : null);
+    const characterBook = (char.data?.character_book ?? char.character_book) ?? null;
     const lorebookBox = document.getElementById('modalLorebookBox');
     if (lorebookBox) {
         if (characterBook && characterBook.entries && characterBook.entries.length > 0) {
@@ -28912,8 +28965,10 @@ async function writeCardFields(char, fieldUpdates) {
             creator: updatedData.creator,
             character_version: updatedData.character_version,
             tags: updatedData.tags,
-            alternate_greetings: updatedData.alternate_greetings,
-            character_book: updatedData.character_book,
+            // NOTE: do NOT send top-level alternate_greetings/character_book here.
+            // deepMerge would stamp a legacy V1 shadow onto the card that vanilla ST
+            // never updates, causing it to hide fresh vanilla greeting/lorebook edits.
+            // The canonical copies live in data.* (carried by `data: updatedData`).
             create_date: existingCreateDate,
             data: updatedData,
         };
