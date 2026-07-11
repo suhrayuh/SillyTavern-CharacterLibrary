@@ -3744,20 +3744,6 @@ body.char-modal-above .cl-modal.visible {
     font-size: var(--font-pre-base);
 }
 
-.expanded-greeting-preview {
-    flex: 1;
-    color: var(--text-muted);
-    font-size: var(--font-md);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: none;
-}
-
-.expanded-greeting-item.collapsed .expanded-greeting-preview {
-    display: block;
-}
-
 .expanded-greeting-item.collapsed .expanded-greeting-textarea {
     display: none;
 }

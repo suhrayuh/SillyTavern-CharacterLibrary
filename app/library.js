@@ -10472,9 +10472,11 @@ async function openModal(char, { navList } = {}) {
         if (altBox) {
             if (altGreetings && altGreetings.length > 0) {
                 document.getElementById('altGreetingsCount').innerText = altGreetings.length;
-                const listHTML = altGreetings.map((g, i) =>
-                    `<div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.1);"><strong style="color:var(--accent);">#${i+1}:</strong> <span>${formatRichText((g || '').trim(), char.name)}</span></div>`
-                ).join('');
+                const altNames = char.data?.extensions?.alternate_greetings_names ?? [];
+                const listHTML = altGreetings.map((g, i) => {
+                    const gName = (altNames[i] || '').trim();
+                    return `<div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.1);"><strong style="color:var(--accent);">#${i+1}${gName ? ` (${escapeHtml(gName)})` : ''}:</strong> <span>${formatRichText((g || '').trim(), char.name)}</span></div>`;
+                }).join('');
                 document.getElementById('modalAltGreetings').innerHTML = listHTML;
                 altBox.style.display = 'block';
             } else {
@@ -10705,15 +10707,15 @@ async function populateEditPane() {
 
     setEditPaneLoadingState('hidden'); // drop any stale loader from a prior open
 
-    if (char._slim) {
-        const avatar = char.avatar;
-        setEditPaneLoadingState('loading');
-        await hydrateCharacter(char);
-        char = activeChar; // re-resolve: a concurrent refresh may have swapped activeChar for a fresh object
-        if (!char || char.avatar !== avatar) { setEditPaneLoadingState('hidden'); _editPanePopulated = false; return; } // modal swapped mid-fetch
-        if (char._slim) { setEditPaneLoadingState('error'); _editPanePopulated = false; return; } // hydrate failed or re-slimmed; leave covered
-        setEditPaneLoadingState('hidden');
-    }
+    // Hardening: always re-hydrate so greeting names (and other fields) edited in the
+    // vanilla ST character tab mid-session are picked up — not just on first (slim) open.
+    const avatar = char.avatar;
+    if (char._slim) setEditPaneLoadingState('loading');
+    await hydrateCharacter(char);
+    char = activeChar; // re-resolve: a concurrent refresh may have swapped activeChar for a fresh object
+    if (!char || char.avatar !== avatar) { setEditPaneLoadingState('hidden'); _editPanePopulated = false; return; } // modal swapped mid-fetch
+    if (char._slim) { setEditPaneLoadingState('error'); _editPanePopulated = false; return; } // hydrate failed or re-slimmed; leave covered
+    setEditPaneLoadingState('hidden');
 
     const desc = char.description || (char.data ? char.data.description : "") || "";
     const firstMes = char.first_mes || (char.data ? char.data.first_mes : "") || "";
@@ -10758,7 +10760,9 @@ async function populateEditPane() {
 
     // Populate alternate greetings editor
     const altGreetings = (char.data?.alternate_greetings ?? char.alternate_greetings) ?? [];
-    populateAltGreetingsEditor(altGreetings);
+    const rawAltNames = char.data?.extensions?.alternate_greetings_names ?? [];
+    const altGreetingNames = normalizeAltGreetingNames(rawAltNames, altGreetings.length);
+    populateAltGreetingsEditor(altGreetings, altGreetingNames);
 
     // Populate lorebook editor
     const characterBook = (char.data?.character_book ?? char.character_book) ?? null;
@@ -10767,6 +10771,7 @@ async function populateEditPane() {
     // Store raw data for cancel/restore
     originalRawData = {
         altGreetings: altGreetings ? [...altGreetings] : [],
+        altGreetingNames: altGreetingNames ? [...altGreetingNames] : [],
         characterBook: characterBook ? JSON.parse(JSON.stringify(characterBook)) : null
     };
 
@@ -10788,6 +10793,7 @@ async function populateEditPane() {
         post_history_instructions: document.getElementById('editPostHistoryInstructions').value,
         creator_notes: document.getElementById('editCreatorNotes').value,
         alternate_greetings: getAltGreetingsFromEditor(),
+        alternate_greetings_names: getAltGreetingNamesFromEditor(),
         character_book: getCharacterBookFromEditor(),
         altFields: collectAltFieldsSnapshot()
     };
@@ -12593,6 +12599,7 @@ function collectEditValues() {
         post_history_instructions: document.getElementById('editPostHistoryInstructions').value,
         creator_notes: document.getElementById('editCreatorNotes').value,
         alternate_greetings: getAltGreetingsFromEditor(),
+        alternate_greetings_names: getAltGreetingNamesFromEditor(),
         character_book: getCharacterBookFromEditor(),
         altFields: collectAltFieldsSnapshot()
     };
@@ -12617,6 +12624,7 @@ function generateChangesDiff(original, current) {
         post_history_instructions: 'Post-History Instructions',
         creator_notes: "Creator's Notes",
         alternate_greetings: 'Alternate Greetings',
+        alternate_greetings_names: 'Alternate Greeting Names',
         character_book: 'Embedded Lorebook',
         altFields: 'Alternate Fields'
     };
@@ -12669,6 +12677,22 @@ function generateChangesDiff(original, current) {
                     field: fieldLabels[key],
                     old: oldNorm.map((g, i) => `#${i+1}: ${g}`).join('\n') || '(none)',
                     new: newNorm.map((g, i) => `#${i+1}: ${g}`).join('\n') || '(none)'
+                });
+            }
+            continue;
+        }
+        
+        // Handle alternate greeting names array comparison
+        if (key === 'alternate_greetings_names') {
+            const oldNorm = (oldVal || []).map(s => String(s || '').replace(/\r\n/g, '\n').trim());
+            const newNorm = (newVal || []).map(s => String(s || '').replace(/\r\n/g, '\n').trim());
+            const oldStr = JSON.stringify(oldNorm);
+            const newStr = JSON.stringify(newNorm);
+            if (oldStr !== newStr) {
+                changes.push({
+                    field: fieldLabels[key],
+                    old: oldNorm.map((n, i) => `#${i+1}: ${n || '(none)'}`).join('\n') || '(none)',
+                    new: newNorm.map((n, i) => `#${i+1}: ${n || '(none)'}`).join('\n') || '(none)'
                 });
             }
             continue;
@@ -12914,6 +12938,7 @@ function showSaveConfirmation() {
             character_version: currentValues.character_version,
             tags: currentValues.tagsArray,
             alternate_greetings: currentValues.alternate_greetings,
+            ['extensions.alternate_greetings_names']: currentValues.alternate_greetings_names,
             character_book: currentValues.character_book,
             [`extensions.${activeNs}.tagline`]: currentValues.tagline ?? '',
             [`extensions.${activeNs}.pageName`]: currentValues.listingName ?? '',
@@ -12938,6 +12963,7 @@ function showSaveConfirmation() {
         character_version: currentValues.character_version,
         tags: currentValues.tagsArray,
         alternate_greetings: currentValues.alternate_greetings,
+        ['extensions.alternate_greetings_names']: currentValues.alternate_greetings_names,
         character_book: currentValues.character_book,
         [`extensions.${activeNs}.tagline`]: currentValues.tagline ?? '',
         [`extensions.${activeNs}.pageName`]: currentValues.listingName ?? '',
@@ -13465,7 +13491,7 @@ function cancelEditing() {
     _editTagsArray = [...(originalValues.tagsArray || [])];
     
     // Restore alternate greetings from raw data
-    populateAltGreetingsEditor(originalRawData.altGreetings || []);
+    populateAltGreetingsEditor(originalRawData.altGreetings || [], originalRawData.altGreetingNames || []);
     
     // Restore lorebook from raw data
     populateLorebookEditor(originalRawData.characterBook);
@@ -14200,17 +14226,21 @@ function openGreetingsModal() {
     
     // Collect current alternate greetings
     const altGreetings = [];
+    const altNames = [];
     if (altGreetingsContainer) {
-        const altInputs = altGreetingsContainer.querySelectorAll('.alt-greeting-input');
-        altInputs.forEach(input => {
-            altGreetings.push(input.value);
+        const altItems = altGreetingsContainer.querySelectorAll('.alt-greeting-item');
+        altItems.forEach(item => {
+            const textarea = item.querySelector('.alt-greeting-input');
+            const nameInput = item.querySelector('.alt-greeting-name');
+            altGreetings.push(textarea ? textarea.value : '');
+            altNames.push(nameInput ? nameInput.value : '');
         });
     }
     
     // Build modal HTML
     let altGreetingsHtml = '';
     altGreetings.forEach((greeting, idx) => {
-        const previewText = greeting ? greeting.substring(0, 100).replace(/\n/g, ' ') + (greeting.length > 100 ? '...' : '') : 'Empty greeting';
+        const nameVal = (altNames[idx] || '').trim();
         altGreetingsHtml += `
             <div class="expanded-greeting-item" data-index="${idx}">
                 <div class="expanded-greeting-header">
@@ -14218,7 +14248,7 @@ function openGreetingsModal() {
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                     <span class="expanded-greeting-num">#${idx + 1}</span>
-                    <span class="expanded-greeting-preview">${escapeHtml(previewText)}</span>
+                    <input type="text" class="glass-input expanded-greeting-name" placeholder="Greeting name (optional)" value="${escapeHtml(nameVal)}" style="flex: 1; min-width: 0; height: 30px; padding: 2px 10px; font-size: var(--font-sm);" />
                     <button type="button" class="expanded-greeting-delete" title="Delete this greeting">
                         <i class="fa-solid fa-trash"></i>
                     </button>
@@ -14336,7 +14366,7 @@ function openGreetingsModal() {
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                     <span class="expanded-greeting-num">#${idx + 1}</span>
-                    <span class="expanded-greeting-preview">Empty greeting</span>
+                    <input type="text" class="glass-input expanded-greeting-name" placeholder="Greeting name (optional)" style="flex: 1; min-width: 0; height: 30px; padding: 2px 10px; font-size: var(--font-sm);" />
                     <button type="button" class="expanded-greeting-delete" title="Delete this greeting">
                         <i class="fa-solid fa-trash"></i>
                     </button>
@@ -14442,9 +14472,13 @@ function openGreetingsModal() {
         // Collect and update alternate greetings
         const expandedContainer = document.getElementById('expandedAltGreetingsContainer');
         const expandedGreetings = [];
+        const expandedNames = [];
         if (expandedContainer) {
-            expandedContainer.querySelectorAll('.expanded-greeting-textarea').forEach(textarea => {
-                expandedGreetings.push(textarea.value);
+            expandedContainer.querySelectorAll('.expanded-greeting-item').forEach(item => {
+                const textarea = item.querySelector('.expanded-greeting-textarea');
+                const nameInput = item.querySelector('.expanded-greeting-name');
+                expandedGreetings.push(textarea ? textarea.value : '');
+                expandedNames.push(nameInput ? nameInput.value : '');
             });
         }
         
@@ -14453,7 +14487,7 @@ function openGreetingsModal() {
         if (altGreetingsContainerCurrent) {
             altGreetingsContainerCurrent.innerHTML = '';
             expandedGreetings.forEach((greeting, idx) => {
-                addAltGreetingField(altGreetingsContainerCurrent, greeting, idx);
+                addAltGreetingField(altGreetingsContainerCurrent, greeting, idx, expandedNames[idx] || '');
             });
         }
         
@@ -16759,20 +16793,30 @@ function setupEventListeners() {
 }
 
 // Alternate Greetings Editor Functions
-function populateAltGreetingsEditor(greetings) {
+// Normalize a raw names array to exactly `len` entries (pad with '' / truncate),
+// so the names array stays index-aligned with the greetings array.
+function normalizeAltGreetingNames(raw, len) {
+    const arr = Array.isArray(raw) ? raw.map(s => String(s ?? '')) : [];
+    if (arr.length < len) arr.length = len;        // pad with empty strings
+    else if (arr.length > len) arr.length = len;   // truncate extras
+    return arr;
+}
+
+function populateAltGreetingsEditor(greetings, names) {
     const container = document.getElementById('altGreetingsEditContainer');
     if (!container) return;
     
     container.innerHTML = '';
     
+    const nameArr = Array.isArray(names) ? names : [];
     if (greetings && greetings.length > 0) {
         greetings.forEach((greeting, index) => {
-            addAltGreetingField(container, (greeting || '').trim(), index);
+            addAltGreetingField(container, (greeting || '').trim(), index, nameArr[index] || '');
         });
     }
 }
 
-function addAltGreetingField(container, value = '', index = null) {
+function addAltGreetingField(container, value = '', index = null, name = '') {
     if (!container) {
         container = document.getElementById('altGreetingsEditContainer');
     }
@@ -16786,8 +16830,11 @@ function addAltGreetingField(container, value = '', index = null) {
     
     wrapper.innerHTML = `
         <div style="display: flex; align-items: flex-start; gap: 8px;">
-            <span style="color: var(--accent); font-weight: bold; padding-top: 8px;">#${idx + 1}</span>
-            <textarea class="glass-input alt-greeting-input" rows="3" placeholder="Alternate greeting message..." style="flex: 1;"></textarea>
+            <span style="color: var(--accent); font-weight: bold; padding-top: 7px; line-height: 1;">#${idx + 1}</span>
+            <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;">
+                <input type="text" class="glass-input alt-greeting-name" placeholder="Greeting name (optional)" style="height: 30px; padding: 2px 10px; font-size: var(--font-sm);" />
+                <textarea class="glass-input alt-greeting-input" rows="3" placeholder="Alternate greeting message..." style="width: 100%;"></textarea>
+            </div>
             <button type="button" class="remove-alt-greeting-btn" title="Remove this greeting">
                 <i class="fa-solid fa-trash"></i>
             </button>
@@ -16796,7 +16843,9 @@ function addAltGreetingField(container, value = '', index = null) {
     
     container.appendChild(wrapper);
     
-    // Set the textarea value directly (not via innerHTML) to ensure .value property is set
+    // Set values directly (not via innerHTML) to ensure .value reflects the model.
+    const nameInput = wrapper.querySelector('.alt-greeting-name');
+    if (nameInput) nameInput.value = name || '';
     const textarea = wrapper.querySelector('.alt-greeting-input');
     if (textarea && value) {
         textarea.value = value;
@@ -16816,7 +16865,7 @@ function renumberAltGreetings() {
     
     const items = container.querySelectorAll('.alt-greeting-item');
     items.forEach((item, idx) => {
-        const numSpan = item.querySelector('span');
+        const numSpan = item.querySelector('.alt-greeting-num, span');
         if (numSpan) {
             numSpan.textContent = `#${idx + 1}`;
         }
@@ -16838,6 +16887,27 @@ function getAltGreetingsFromEditor() {
     });
     
     return greetings;
+}
+
+// Collect names in lockstep with getAltGreetingsFromEditor(): only emit a name for
+// greetings that are non-empty, so the two arrays stay index-aligned.
+function getAltGreetingNamesFromEditor() {
+    const container = document.getElementById('altGreetingsEditContainer');
+    if (!container) return [];
+    
+    const items = container.querySelectorAll('.alt-greeting-item');
+    const names = [];
+    
+    items.forEach(item => {
+        const textarea = item.querySelector('.alt-greeting-input');
+        const nameInput = item.querySelector('.alt-greeting-name');
+        const greetingVal = textarea ? textarea.value : '';
+        if (greetingVal.trim()) {
+            names.push(nameInput ? nameInput.value : '');
+        }
+    });
+    
+    return names;
 }
 
 // ==========================================
@@ -27705,7 +27775,7 @@ function openContentFullscreen(content, title, icon, charName, urlMap) {
  * @param {string} charName - Character name for placeholder replacement
  * @param {Object} [urlMap] - Pre-built localization map (optional)
  */
-function openAltGreetingsFullscreen(greetings, charName, urlMap) {
+function openAltGreetingsFullscreen(greetings, charName, urlMap, names) {
     if (!greetings || greetings.length === 0) {
         showToast('No alternate greetings to display', 'warning');
         return;
@@ -27734,15 +27804,17 @@ function openAltGreetingsFullscreen(greetings, charName, urlMap) {
     ).join('');
     
     // Build greeting cards - only the first card has content, others render lazily
-    const cardsHtml = greetings.map((g, i) => `
+    const cardsHtml = greetings.map((g, i) => {
+        const gName = (names && names[i] ? String(names[i]).trim() : '');
+        return `
         <div class="greeting-card" data-greeting-index="${i}" style="${i !== 0 ? 'display: none;' : ''}">
             <div class="greeting-header">
                 <div class="greeting-number">${i + 1}</div>
-                <div class="greeting-label">Alternate Greeting</div>
+                <div class="greeting-label">Alternate Greeting${gName ? ` &mdash; ${escapeHtml(gName)}` : ''}</div>
             </div>
             <div class="greeting-content">${i === 0 ? formatGreeting(g) : ''}</div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
     
     const modalHtml = `
         <div id="altGreetingsFullscreenModal" class="modal-overlay">
@@ -27890,7 +27962,7 @@ function initContentExpandHandlers() {
                 const folderName = getGalleryFolderName(activeChar);
                 urlMap = await buildMediaLocalizationMap(folderName, activeChar.avatar);
             }
-            openAltGreetingsFullscreen(greetings, charName, urlMap);
+            openAltGreetingsFullscreen(greetings, charName, urlMap, activeChar?.data?.extensions?.alternate_greetings_names);
         };
         altGreetingsExpandBtn.addEventListener('click', altGreetingsExpandBtn._expandHandler);
     }
