@@ -646,6 +646,17 @@ class WyvernBrowseView extends BrowseView {
             const el = document.getElementById('wyvernSortSelect');
             if (el) el.value = defaults.sort;
         }
+        if (defaults.hideOwned) {
+            wyvernFilterHideOwned = true;
+            const el = document.getElementById('wyvernFilterHideOwned');
+            if (el) el.checked = true;
+        }
+        if (defaults.hidePossible) {
+            wyvernFilterHidePossible = true;
+            const el = document.getElementById('wyvernFilterHidePossible');
+            if (el) el.checked = true;
+        }
+        if (defaults.hideOwned || defaults.hidePossible) updateWyvernFiltersButtonState();
     }
 
     async activate(container, options = {}) {

@@ -2,7 +2,7 @@
 
 import { BrowseView } from '../browse-view.js';
 import CoreAPI from '../../core-api.js';
-import { IMG_PLACEHOLDER, formatNumber, BROWSE_PURIFY_CONFIG, skeletonLines, deferRender, deferCall, isMobileMode, finishBrowseImport } from '../provider-utils.js';
+import { IMG_PLACEHOLDER, formatNumber, BROWSE_PURIFY_CONFIG, skeletonLines, deferRender, deferCall, isMobileMode, finishBrowseImport, proxyEncode } from '../provider-utils.js';
 import {
     CHUB_API_BASE,
     CHUB_GATEWAY_BASE,
@@ -826,6 +826,17 @@ class ChubBrowseView extends BrowseView {
                 if (el) el.value = defaults.sort;
             }
         }
+        if (defaults.hideOwned) {
+            chubFilterHideOwned = true;
+            const el = document.getElementById('chubFilterHideOwned');
+            if (el) el.checked = true;
+        }
+        if (defaults.hidePossible) {
+            chubFilterHidePossible = true;
+            const el = document.getElementById('chubFilterHidePossible');
+            if (el) el.checked = true;
+        }
+        if (defaults.hideOwned || defaults.hidePossible) updateChubFiltersButtonState();
     }
 
     activate(container, options = {}) {
@@ -3756,7 +3767,7 @@ async function openChubCharPreview(char) {
                 try { return await fetch(url, { headers: galleryHeaders, signal: fetchSignal }); }
                 catch (e) {
                     if (e.name === 'AbortError') throw e;
-                    return await fetch(`/proxy/${encodeURIComponent(url)}`, { headers: galleryHeaders, signal: fetchSignal });
+                    return await fetch(`/proxy/${proxyEncode(url)}`, { headers: galleryHeaders, signal: fetchSignal });
                 }
             };
             // Search-result hasGallery is unreliable (returns false for chars whose detail says true),

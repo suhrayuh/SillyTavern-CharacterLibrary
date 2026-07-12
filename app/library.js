@@ -467,6 +467,13 @@ function makeCharSortComparator() {
         if (sortType === 'created_old') return a._createDate - b._createDate;
         if (sortType === 'chats_most') return getChatCount(b) - getChatCount(a);
         if (sortType === 'chats_least') return getChatCount(a) - getChatCount(b);
+        if (sortType === 'tokens_high' || sortType === 'tokens_low') {
+            const ta = a._tokenEstimate, tb = b._tokenEstimate;
+            const ua = ta == null, ub = tb == null;
+            // Unknown sorts last either direction.
+            if (ua || ub) return (ua && ub) ? 0 : (ua ? 1 : -1);
+            return sortType === 'tokens_high' ? tb - ta : ta - tb;
+        }
         if (sortType === 'random') return getRandomSortKey(a) - getRandomSortKey(b);
         return 0;
     };
@@ -499,6 +506,13 @@ function prepareCharacterKeys(chars) {
         c._createDate = getCharacterCreateDate(c);
         const lastChat = c.date_last_chat;
         c._dateLastChat = lastChat ? (parseDateValue(lastChat)?.getTime() || 0) : 0;
+        // Shallow cards have no heavy text; undefined = "not known yet" (sorts last / filters out) until recovery fills it.
+        if (c.shallow) {
+            c._tokenEstimate = _tokenEstimateCache.has(c.avatar) ? _tokenEstimateCache.get(c.avatar) : undefined;
+        } else {
+            c._tokenEstimate = computeTokenEstimate(c);
+            _tokenEstimateCache.set(c.avatar, c._tokenEstimate);
+        }
     }
 }
 
@@ -635,6 +649,7 @@ const DEFAULT_SETTINGS = {
     galleryThumbPrewarm: true,
 
     // ---- UI & Display ----
+    chatCardDensity: 'comfortable',
     buttonStyle: 'glass',
     uiScale: 3,
     modalSize: 2,
@@ -1173,10 +1188,14 @@ async function loadGallerySettings() {
                     }
                 } catch (_) { /* ignore */ }
                 debugLog('[Settings] Loaded fresh from disk via /api/settings/get', gallerySettings);
-                // Also sync to opener's in-memory state so saves work correctly
+                // Live namespace keys win over the disk read (they may carry another CL
+                // instance's not-yet-flushed changes); defaults+disk fill the gaps so
+                // ST-side readers keep seeing the full key set.
                 const context = getSTContext();
                 if (context && context.extensionSettings) {
-                    context.extensionSettings[SETTINGS_KEY] = { ...gallerySettings };
+                    const merged = { ...gallerySettings, ...(context.extensionSettings[SETTINGS_KEY] || {}) };
+                    context.extensionSettings[SETTINGS_KEY] = merged;
+                    gallerySettings = { ...merged };
                 }
                 return;
             }
@@ -1237,11 +1256,19 @@ function migrateSettings() {
  * Save settings to SillyTavern's extension settings (server-side)
  * Also saves to localStorage as backup
  */
-function saveGallerySettings() {
+function saveGallerySettings(changedKeys = null) {
     // Try to save to SillyTavern extension settings first
     const context = getSTContext();
     if (context && context.extensionSettings) {
-        context.extensionSettings[SETTINGS_KEY] = { ...gallerySettings };
+        const ns = context.extensionSettings[SETTINGS_KEY];
+        if (changedKeys && ns) {
+            // Surgical per-key write: a concurrent CL instance (embedded pane + tab)
+            // may hold newer values for OTHER keys; a wholesale stamp would revert them.
+            for (const key of changedKeys) ns[key] = gallerySettings[key];
+        } else {
+            // Wholesale, for boot migrations that delete keys (deletion must propagate).
+            context.extensionSettings[SETTINGS_KEY] = { ...gallerySettings };
+        }
         // Trigger ST's debounced save to persist to disk
         if (typeof context.saveSettingsDebounced === 'function') {
             context.saveSettingsDebounced();
@@ -1263,12 +1290,12 @@ function getSetting(key) {
 
 function setSetting(key, value) {
     gallerySettings[key] = value;
-    saveGallerySettings();
+    saveGallerySettings([key]);
 }
 
 function setSettings(settings) {
     Object.assign(gallerySettings, settings);
-    saveGallerySettings();
+    saveGallerySettings(Object.keys(settings));
 }
 
 // Respects mobileHaptics setting and silently no-ops on unsupported devices.
@@ -1891,6 +1918,10 @@ function setupSettingsModal() {
             const isDisabled = disabledProviders.has(provider.id);
             if (isDisabled) item.classList.add('provider-disabled');
 
+            const hideToggles = `
+                <label class="provider-default-hide" title="Hide cards already in your library by default"><input type="checkbox" class="provider-default-hide-owned"${defaults.hideOwned ? ' checked' : ''}>Hide Owned</label>
+                <label class="provider-default-hide" title="Hide possible-match cards by default"><input type="checkbox" class="provider-default-hide-possible"${defaults.hidePossible ? ' checked' : ''}>Hide Possible</label>`;
+
             item.innerHTML = `
                 <i class="fa-solid fa-grip-vertical drag-handle"></i>
                 <button type="button" class="provider-toggle-btn${isDisabled ? ' disabled' : ''}" data-provider="${provider.id}" title="${isDisabled ? 'Enable' : 'Disable'} in Online tab">
@@ -1901,7 +1932,7 @@ function setupSettingsModal() {
                 ${provider.beta ? '<span class="provider-beta-badge">Beta</span>' : ''}
                 <span class="provider-order-badge">Default</span>
                 <div class="provider-order-defaults">
-                    ${viewSelect}${sortSelect}
+                    ${viewSelect}${sortSelect}${hideToggles}
                 </div>
             `;
 
@@ -2029,11 +2060,15 @@ function setupSettingsModal() {
             const sortSel = item.querySelector('.provider-default-sort');
             const viewVal = viewSel?.value || '';
             const sortVal = sortSel?.value || '';
+            const hideOwned = !!item.querySelector('.provider-default-hide-owned')?.checked;
+            const hidePossible = !!item.querySelector('.provider-default-hide-possible')?.checked;
 
-            if (viewVal || sortVal) {
+            if (viewVal || sortVal || hideOwned || hidePossible) {
                 defaults[pid] = {};
                 if (viewVal) defaults[pid].view = viewVal;
                 if (sortVal) defaults[pid].sort = sortVal;
+                if (hideOwned) defaults[pid].hideOwned = true;
+                if (hidePossible) defaults[pid].hidePossible = true;
             }
         });
 
@@ -2090,6 +2125,8 @@ function setupSettingsModal() {
                 <span class="provider-order-badge">Default</span>
                 <div class="provider-order-defaults">
                     ${viewSelect}${sortSelect}
+                    <label class="provider-default-hide" title="Hide cards already in your library by default"><input type="checkbox" class="provider-default-hide-owned">Hide Owned</label>
+                    <label class="provider-default-hide" title="Hide possible-match cards by default"><input type="checkbox" class="provider-default-hide-possible">Hide Possible</label>
                 </div>
             `;
             container.appendChild(item);
@@ -8127,6 +8164,7 @@ function slimCharacter(char) {
         _dateAdded: char._dateAdded,
         _createDate: char._createDate,
         _dateLastChat: char._dateLastChat,
+        _tokenEstimate: char._tokenEstimate,
         _slim: true
     };
 
@@ -8192,6 +8230,10 @@ async function hydrateCharacter(char) {
         if (full.spec) char.spec = full.spec;
         if (full.spec_version) char.spec_version = full.spec_version;
 
+        // Refresh now the heavy text is present (a save may have changed it).
+        char._tokenEstimate = computeTokenEstimate(char);
+        _tokenEstimateCache.set(char.avatar, char._tokenEstimate);
+
         char._slim = false;
         return char;
     } catch (e) {
@@ -8202,6 +8244,19 @@ async function hydrateCharacter(char) {
 
 let _recoveryGeneration = 0;
 let _extensionsCache = new Map();
+// avatar -> token estimate, so a lazy-loading re-render restores it instead of recomputing 0 (like _extensionsCache).
+let _tokenEstimateCache = new Map();
+
+// mes_example deliberately excluded, matching the original modal estimate.
+const TOKEN_ESTIMATE_FIELDS = ['description', 'personality', 'scenario', 'first_mes', 'system_prompt'];
+
+// Sums field lengths / 4 without concat, keeping the prepare loop allocation-free.
+function computeTokenEstimate(src) {
+    if (!src) return 0;
+    let total = 0;
+    for (const field of TOKEN_ESTIMATE_FIELDS) total += getCharField(src, field).length;
+    return Math.round(total / 4);
+}
 
 /**
  * Recover data.extensions for characters received with ST lazy loading (shallow mode).
@@ -8246,7 +8301,14 @@ async function recoverShallowExtensions(generation) {
                         const response = await apiRequest(ENDPOINTS.CHARACTERS_GET, 'POST', { avatar_url: char.avatar });
                         if (!response.ok) return;
                         const full = await response.json();
-                        if (!full?.data?.extensions) return;
+                        if (!full) return;
+
+                        // Piggyback the estimate on this full fetch, before the extensions guard so extension-less cards still get it.
+                        const tok = computeTokenEstimate(full);
+                        char._tokenEstimate = tok;
+                        _tokenEstimateCache.set(char.avatar, tok);
+
+                        if (!full.data?.extensions) return;
 
                         if (!char.data) char.data = {};
                         char.data.extensions = full.data.extensions;
@@ -10832,6 +10894,7 @@ async function openModal(char, { navList } = {}) {
             }
             if (char.spec) activeChar.spec = char.spec;
             if (char.spec_version) activeChar.spec_version = char.spec_version;
+            activeChar._tokenEstimate = char._tokenEstimate;
             activeChar._slim = false;
             char = activeChar;
         }
@@ -12706,8 +12769,9 @@ async function deleteCharacter(char, deleteChats = false) {
             }
         }
 
-        // Evict from extensions cache (ST lazy loading)
+        // Evict from the per-avatar caches (ST lazy loading restore path)
         if (avatar) _extensionsCache.delete(avatar);
+        if (avatar) _tokenEstimateCache.delete(avatar);
         
         // Trigger character refresh in the ST window. Best-effort with a timeout:
         // on mobile the opener tab may be suspended and cross-window awaits hang.
@@ -15329,6 +15393,7 @@ const ADV_FILTER_FIELDS = {
     dateCreated: { label: 'Date Created', type: 'date', operators: ['before', 'after', 'in_the_last'] },
     lastChat: { label: 'Last Chat', type: 'date', operators: ['before', 'after', 'in_the_last', 'never'] },
     version: { label: 'Version', type: 'text', operators: ['contains', 'is_empty', 'is_not_empty'] },
+    tokens: { label: 'Token Count', type: 'number', operators: ['more_than', 'less_than', 'equals'] },
     playlist: { label: 'Playlist', type: 'playlist', operators: ['in', 'not_in', 'in_any', 'not_in_any'] },
     nameOverride: { label: 'Name Override', type: 'nameOverride', operators: ['has_override', 'no_override', 'set_to_card', 'set_to_listing'] },
 };
@@ -15784,6 +15849,7 @@ function evaluateAdvFilterRule(c, rule) {
             return evalTextOp(ver, op, val);
         }
         case 'playlist': return evalPlaylistOp(c, op, rule.value);
+        case 'tokens': return c._tokenEstimate == null ? false : evalNumberOp(c._tokenEstimate, op, rule.value);
         case 'nameOverride': return evalNameOverrideOp(c, op);
     }
     return true;
@@ -17613,7 +17679,7 @@ function extractPlainText(html, maxLength = 200) {
         // Remove all HTML tags
         .replace(/<[^>]+>/g, ' ')
         // Remove markdown images: ![alt](url) or ![alt]
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+        .replace(/!\[[^\]]*\]\((?:(?:[^()]|\([^()]*\))*|[^)]*)\)/g, '')
         .replace(/!\[[^\]]*\]/g, '')
         // Remove markdown links but keep text: [text](url) -> text
         .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -17674,7 +17740,7 @@ function formatRichText(text, charName = '', preserveHtml = false) {
         // Ultra CSS mode: <style> tag at START with substantial CSS - touch almost nothing
         if (hasStyleTagAtStart) {
             // Only convert markdown images (safe - won't be in CSS)
-            processedText = processedText.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)/g, (match, alt, src) => {
+            processedText = processedText.replace(/!\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+|[^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)/g, (match, alt, src) => {
                 // Allow http/https URLs and local paths (starting with /)
                 if (!src.match(/^(https?:\/\/|\/)/i)) return match;
                 const altAttr = alt ? ` alt="${alt.replace(/"/g, '&quot;')}"` : '';
@@ -17707,7 +17773,7 @@ function formatRichText(text, charName = '', preserveHtml = false) {
         // Convert markdown images and links (safe for all modes):
         
         // Convert linked images: [![alt](img-url)](link-url)
-        processedText = processedText.replace(/\[\!\[([^\]]*)\]\(([^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)\]\(([^)]+)\)/g, (match, alt, imgSrc, linkHref) => {
+        processedText = processedText.replace(/\[\!\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+|[^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)\]\(([^)]+)\)/g, (match, alt, imgSrc, linkHref) => {
             // Allow http/https URLs and local paths (starting with /)
             if (!imgSrc.match(/^(https?:\/\/|\/)/i)) return match;
             const altAttr = alt ? ` alt="${alt.replace(/"/g, '&quot;')}"` : '';
@@ -17716,7 +17782,7 @@ function formatRichText(text, charName = '', preserveHtml = false) {
         });
         
         // Convert standalone markdown images: ![alt](url) or ![alt](url =WxH) or ![alt](url "title")
-        processedText = processedText.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)/g, (match, alt, src) => {
+        processedText = processedText.replace(/!\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+|[^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)/g, (match, alt, src) => {
             // Allow http/https URLs and local paths (starting with /)
             if (!src.match(/^(https?:\/\/|\/)/i)) return match;
             const altAttr = alt ? ` alt="${alt.replace(/"/g, '&quot;')}"` : '';
@@ -17803,7 +17869,7 @@ function formatRichText(text, charName = '', preserveHtml = false) {
     });
     
     // 2. Convert linked images: [![alt](img-url)](link-url)
-    processedText = processedText.replace(/\[\!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)/g, (match, alt, imgSrc, linkHref) => {
+    processedText = processedText.replace(/\[\!\[([^\]]*)\]\(((?:[^()]|\([^()]*\))+|[^)]+)\)\]\(([^)]+)\)/g, (match, alt, imgSrc, linkHref) => {
         // Allow http/https URLs and local paths (starting with /)
         if (!imgSrc.match(/^(https?:\/\/|\/)/i)) return match;
         const altAttr = alt ? ` alt="${alt.replace(/"/g, '&quot;')}"` : '';
@@ -17812,7 +17878,7 @@ function formatRichText(text, charName = '', preserveHtml = false) {
     });
     
     // 3. Convert standalone markdown images: ![alt](url) or ![alt](url "title")
-    processedText = processedText.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (match, alt, src) => {
+    processedText = processedText.replace(/!\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+|[^)\s]+)(?:\s+"[^"]*")?\)/g, (match, alt, src) => {
         // Allow http/https URLs and local paths (starting with /)
         if (!src.match(/^(https?:\/\/|\/)/i)) return match;
         const altAttr = alt ? ` alt="${alt.replace(/"/g, '&quot;')}"` : '';
@@ -22017,12 +22083,16 @@ function extractMediaUrls(text) {
     
     const urls = [];
     
-    // Match ![](url) markdown format - stop at whitespace or ) to exclude sizing params
-    // Supports: ![alt](url), ![alt](url =WxH), ![alt](url "title")
-    const markdownPattern = /!\[.*?\]\((https?:\/\/[^\s\)]+)/g;
+    // Match ![](url) markdown - allow one level of balanced parens in the path so
+    // postimg "(1)" filenames dont truncate at the first ), still stop at whitespace
+    // (sizing params/titles). Single-char first branch keeps the alternation disjoint, so linear time.
+    const markdownPattern = /!\[.*?\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+)/g;
     let match;
     while ((match = markdownPattern.exec(text)) !== null) {
-        urls.push(match[1]);
+        let url = match[1];
+        // An unbalanced-paren URL makes the balanced branch swallow the markdown closer; give it back.
+        if (url.endsWith(')') && text[markdownPattern.lastIndex] !== ')') url = url.slice(0, -1);
+        urls.push(url);
     }
     
     // Match <img src="url"> HTML format
@@ -22524,6 +22594,12 @@ async function readBodyWithCap(response, maxBytes) {
     return merged.buffer;
 }
 
+// encodeURIComponent leaves !'()* literal; strict reverse proxies/WAFs 403 literal
+// parens (postimg "(1)" filenames are the common trigger), so escape them for /proxy/
+function proxyEncode(url) {
+    return encodeURIComponent(url).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+}
+
 async function downloadMediaToMemory(url, timeoutMs = 30000, abortSignal = null) {
     try {
         const safety = isUrlSafeForDownload(url);
@@ -22562,7 +22638,7 @@ async function downloadMediaToMemory(url, timeoutMs = 30000, abortSignal = null)
                 if (directError.name === 'AbortError') throw directError;
                 // fetch() rejected (CORS/network) — try proxy
                 usedProxy = true;
-                const proxyUrl = `/proxy/${encodeURIComponent(url)}`;
+                const proxyUrl = `/proxy/${proxyEncode(url)}`;
                 response = await fetch(proxyUrl, { signal: controller.signal });
             }
 
@@ -24237,7 +24313,7 @@ function replaceMediaUrlsInText(text, urlMap) {
     let result = text;
     
     // Replace markdown images: ![alt](url)
-    result = result.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)/g, (match, alt, url) => {
+    result = result.replace(/!\[([^\]]*)\]\(((?:[^\s()]|\([^\s()]*\))+|[^)\s]+)(?:\s*=[^)]*)?(?:\s+"[^"]*")?\)/g, (match, alt, url) => {
         const localPath = lookupLocalizedMedia(urlMap, url);
         if (localPath) {
             return `![${alt}](${localPath})`;
@@ -24898,27 +24974,10 @@ function getCharField(char, field) {
     return typeof val === 'string' ? val : String(val);
 }
 
-/**
- * Calculate token count estimate from character data (cached)
- */
+// Slim chars read the precomputed key (definition fields are stripped); hydrated compute fresh.
 function estimateTokens(char) {
-    // Use avatar as cache key since it's unique per character
-    const cacheKey = `tokens_${char?.avatar || char?.name || ''}`;
-    const cached = getCached(cacheKey);
-    if (cached !== undefined) return cached;
-    
-    const desc = getCharField(char, 'description') || '';
-    const personality = getCharField(char, 'personality') || '';
-    const scenario = getCharField(char, 'scenario') || '';
-    const firstMes = getCharField(char, 'first_mes') || '';
-    const sysprompt = getCharField(char, 'system_prompt') || '';
-    
-    const totalText = desc + personality + scenario + firstMes + sysprompt;
-    // Rough estimate: ~4 chars per token
-    const tokens = Math.round(totalText.length / 4);
-    
-    setCached(cacheKey, tokens);
-    return tokens;
+    if (char?._slim) return char._tokenEstimate ?? _tokenEstimateCache.get(char.avatar) ?? 0;
+    return computeTokenEstimate(char);
 }
 
 /**
@@ -29204,6 +29263,13 @@ async function writeCardFields(char, fieldUpdates, opts = {}) {
             for (const [field, value] of Object.entries(opts.rootFields || {})) allCharacters[charIndex][field] = value;
         }
         if (updatedData.extensions) _extensionsCache.set(char.avatar, updatedData.extensions);
+        // Under ST lazy loading the post-save refetch restores the cached estimate, so refresh it at the write.
+        if (TOKEN_ESTIMATE_FIELDS.some(f => f in fieldUpdates)) {
+            const tok = computeTokenEstimate(char);
+            char._tokenEstimate = tok;
+            if (charIndex !== -1) allCharacters[charIndex]._tokenEstimate = tok;
+            _tokenEstimateCache.set(char.avatar, tok);
+        }
 
         // The Online In-Library lookup base is keyed on name+creator; a surgical write that
         // changes either must invalidate it (other edit paths refresh via fetchCharacters).

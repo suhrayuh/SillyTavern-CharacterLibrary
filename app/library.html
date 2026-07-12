@@ -6,8 +6,8 @@
     <meta name="color-scheme" content="dark">
     <meta name="referrer" content="no-referrer">
     <title>SillyTavern Character Library</title>
-    <link rel="stylesheet" href="library.css?v=105">
-    <link rel="stylesheet" href="library-mobile.css?v=34">
+    <link rel="stylesheet" href="library.css?v=106">
+    <link rel="stylesheet" href="library-mobile.css?v=35">
     <!-- Noto Sans from SillyTavern's bundled webfonts -->
     <link rel="stylesheet" href="/webfonts/NotoSans/stylesheet.css">
     <!-- Font Awesome for Icons -->
@@ -156,6 +156,8 @@
                     <option value="date_old" data-icon="fa-solid fa-clock-rotate-left">Last Modified (Oldest)</option>
                     <option value="created_new" data-icon="fa-solid fa-calendar-plus">Date Created (Newest)</option>
                     <option value="created_old" data-icon="fa-solid fa-calendar-plus">Date Created (Oldest)</option>
+                    <option value="tokens_high" data-icon="fa-solid fa-weight-hanging">Token Count (High to Low)</option>
+                    <option value="tokens_low" data-icon="fa-solid fa-feather">Token Count (Low to High)</option>
                     <option value="random" data-icon="fa-solid fa-shuffle">Random</option>
                     <option value="chats_most" data-icon="fa-solid fa-layer-group">Most Chats</option>
                     <option value="chats_least" data-icon="fa-solid fa-comment">Least Chats</option>
@@ -281,6 +283,12 @@
                         <option value="longest_chat" data-icon="fa-solid fa-ruler">Longest Chat</option>
                         <option value="shortest_chat" data-icon="fa-solid fa-ruler">Shortest Chat</option>
                         <option value="most_chats" data-icon="fa-solid fa-layer-group">Most Chats (Character)</option>
+                    </select>
+                    <select id="chatsDensitySelect" class="glass-select" title="Card Density">
+                        <option value="spacious" data-icon="fa-solid fa-expand">Spacious</option>
+                        <option value="comfortable" data-icon="fa-solid fa-rectangle-list">Comfortable</option>
+                        <option value="compact" data-icon="fa-solid fa-table-list">Compact</option>
+                        <option value="minimal" data-icon="fa-solid fa-grip-lines">Minimal</option>
                     </select>
                     <div class="grouping-toggle">
                         <button class="glass-btn grouping-btn active" data-group="flat" title="Flat list">
@@ -2083,6 +2091,8 @@ https://jannyai.com/characters/uuid_slug
                                     <option value="date_old" data-icon="fa-solid fa-clock-rotate-left">Last Modified (Oldest)</option>
                                     <option value="created_new" data-icon="fa-solid fa-calendar-plus">Date Created (Newest)</option>
                                     <option value="created_old" data-icon="fa-solid fa-calendar-plus">Date Created (Oldest)</option>
+                                    <option value="tokens_high" data-icon="fa-solid fa-weight-hanging">Token Count (High to Low)</option>
+                                    <option value="tokens_low" data-icon="fa-solid fa-feather">Token Count (Low to High)</option>
                                     <option value="random" data-icon="fa-solid fa-shuffle">Random</option>
                                 </select>
                             </div>
@@ -3215,7 +3225,7 @@ https://jannyai.com/characters/uuid_slug
                         <div class="settings-group">
                             <div class="settings-group-title"><i class="fa-solid fa-info-circle"></i> Version Info</div>
                             <div class="settings-row">
-                                <span class="settings-hint" style="font-family: monospace;">Character Library v6.5.0</span>
+                                <span class="settings-hint" style="font-family: monospace;">Character Library v6.6.0</span>
                             </div>
                         </div>
 
@@ -3388,8 +3398,8 @@ https://jannyai.com/characters/uuid_slug
     <div id="toastContainer" class="toast-container"></div>
 
     <!-- Scripts -->
-    <script src="library.js?v=193"></script>
-    <script type="module" src="../modules/module-loader.js?v=44"></script>
-    <script src="library-mobile.js?v=22"></script>
+    <script src="library.js?v=194"></script>
+    <script type="module" src="../modules/module-loader.js?v=45"></script>
+    <script src="library-mobile.js?v=23"></script>
 </body>
 </html>
