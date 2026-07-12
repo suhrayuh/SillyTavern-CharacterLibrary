@@ -1971,6 +1971,20 @@ window.registerOverlay = window.registerOverlay || function(cfg) {
         chatsSortSection.appendChild(chatsSortChip);
         chatsSection.appendChild(chatsSortSection);
 
+        // Card density; mirrors the real control's hidden state (flat list only, hidden in grouped view)
+        const chatsDensitySection = createSection('Card Density');
+        const chatsDensityChip = createSettingsSelectChip(() => document.getElementById('chatsDensitySelect'), 'Card Density');
+        chatsDensitySection.appendChild(chatsDensityChip);
+        chatsSection.appendChild(chatsDensitySection);
+
+        function syncChatsDensity() {
+            const real = document.getElementById('chatsDensitySelect');
+            const holder = real ? (real._customSelect?.container || real) : null;
+            const show = !!holder && !holder.classList.contains('hidden');
+            if (show) chatsDensityChip._syncLabel();
+            chatsDensitySection.style.display = show ? '' : 'none';
+        }
+
         // Grouping toggle
         const groupSection = createSection('View');
         const groupRow = document.createElement('div');
@@ -1989,6 +2003,7 @@ window.registerOverlay = window.registerOverlay || function(cfg) {
                     groupedChip.classList.toggle('active', b.classList.contains('active'));
                 }
             });
+            syncChatsDensity();
         }
 
         flatChip.addEventListener('click', () => {

@@ -8491,6 +8491,8 @@ html:not(.cl-mobile) .settings-row[data-platform="mobile"] { display: none !impo
 .provider-order-item .provider-order-defaults {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--space-sm);
     margin-left: auto;
     flex-shrink: 0;
@@ -8516,6 +8518,21 @@ html:not(.cl-mobile) .settings-row[data-platform="mobile"] { display: none !impo
 
 .provider-order-item .provider-order-defaults select:focus {
     border-color: var(--accent);
+}
+
+.provider-order-item .provider-default-hide {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-xs);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.provider-order-item .provider-default-hide input {
+    cursor: pointer;
+    margin: 0;
 }
 
 

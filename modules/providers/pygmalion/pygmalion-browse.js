@@ -552,7 +552,10 @@ function updatePygTagsButton() {
 function updatePygFiltersButton() {
     const btn = document.getElementById('pygFiltersBtn');
     if (!btn) return;
-    btn.classList.toggle('has-filters', pygFilterHideOwned || pygFilterHidePossible || !pygSortDescending);
+    const count = [pygFilterHideOwned, pygFilterHidePossible, !pygSortDescending].filter(Boolean).length;
+    btn.classList.toggle('has-filters', count > 0);
+    const span = btn.querySelector('span');
+    if (span) span.textContent = count > 0 ? `Features (${count})` : 'Features';
 }
 
 // ========================================
@@ -2834,6 +2837,17 @@ class PygmalionBrowseView extends BrowseView {
                 if (el) el.value = defaults.sort;
             }
         }
+        if (defaults.hideOwned) {
+            pygFilterHideOwned = true;
+            const el = document.getElementById('pygFilterHideOwned');
+            if (el) el.checked = true;
+        }
+        if (defaults.hidePossible) {
+            pygFilterHidePossible = true;
+            const el = document.getElementById('pygFilterHidePossible');
+            if (el) el.checked = true;
+        }
+        if (defaults.hideOwned || defaults.hidePossible) updatePygFiltersButton();
     }
 
     async activate(container, options = {}) {

@@ -957,6 +957,17 @@ class BotbooruBrowseView extends BrowseView {
                 if (el) el.value = defaults.sort;
             }
         }
+        if (defaults.hideOwned) {
+            bbFilterHideOwned = true;
+            const el = document.getElementById('botbooruFilterHideOwned');
+            if (el) el.checked = true;
+        }
+        if (defaults.hidePossible) {
+            bbFilterHidePossible = true;
+            const el = document.getElementById('botbooruFilterHidePossible');
+            if (el) el.checked = true;
+        }
+        if (defaults.hideOwned || defaults.hidePossible) updateBotbooruFeaturesButton();
     }
 
     activate(container, options = {}) {
@@ -1147,6 +1158,7 @@ function initBotbooruView() {
 
     on('botbooruCuratedFresh', 'change', (e) => {
         bbCuratedFreshOnly = e.target.checked;
+        updateBotbooruFeaturesButton();
         loadBotbooruPosts(true);
     });
 
@@ -1174,6 +1186,7 @@ function initBotbooruView() {
         const checkbox = document.getElementById(id);
         if (checkbox) checkbox.checked = getter();
     });
+    updateBotbooruFeaturesButton();
     filterCheckboxes.forEach(({ id, setter }) => {
         document.getElementById(id)?.addEventListener('change', (e) => {
             if (id === 'botbooruFilterFavorites' && e.target.checked && !getSetting('botbooruToken')) {
@@ -1183,6 +1196,7 @@ function initBotbooruView() {
                 return;
             }
             setter(e.target.checked);
+            updateBotbooruFeaturesButton();
             if (id === 'botbooruFilterFavorites') {
                 // Favorites is a different data source (the account list), not a
                 // client-side predicate; it lives in the browse grid
@@ -1803,6 +1817,15 @@ function updateTagsButtonState() {
     const count = bbTagFilters.size;
     btn.classList.toggle('has-filters', count > 0);
     label.textContent = count > 0 ? `Tags (${count})` : 'Tags';
+}
+
+function updateBotbooruFeaturesButton() {
+    const btn = document.getElementById('botbooruFiltersBtn');
+    if (!btn) return;
+    const count = [bbCuratedFreshOnly, bbFilterFavorites, bbFilterHideOwned, bbFilterHidePossible, bbHideAi].filter(Boolean).length;
+    btn.classList.toggle('has-filters', count > 0);
+    const span = btn.querySelector('span');
+    if (span) span.textContent = count > 0 ? `Features (${count})` : 'Features';
 }
 
 // ========================================

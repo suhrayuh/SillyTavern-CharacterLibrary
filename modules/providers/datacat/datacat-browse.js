@@ -4305,6 +4305,17 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
                 if (el) el.value = defaults.sort;
             }
         }
+        if (defaults.hideOwned) {
+            datacatFilterHideOwned = true;
+            const el = document.getElementById('datacatFilterHideOwned');
+            if (el) el.checked = true;
+        }
+        if (defaults.hidePossible) {
+            datacatFilterHidePossible = true;
+            const el = document.getElementById('datacatFilterHidePossible');
+            if (el) el.checked = true;
+        }
+        if (defaults.hideOwned || defaults.hidePossible) updateDatacatFiltersButtonState();
     }
 
     activate(container, options = {}) {

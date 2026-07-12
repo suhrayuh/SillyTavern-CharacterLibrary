@@ -2685,12 +2685,12 @@ html.cl-mobile .provider-order-item .provider-order-badge {
     grid-area: default;
     justify-self: end;
 }
+/* Two-column grid so every row's controls align; a lone select spans both columns. */
 html.cl-mobile .provider-order-item .provider-order-defaults {
     grid-area: body;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
     gap: var(--space-xs);
     margin-left: 0;
     padding-top: var(--space-xs);
@@ -2704,15 +2704,38 @@ html.cl-mobile .provider-order-item .provider-order-defaults:empty {
 html.cl-mobile .provider-order-item .provider-order-defaults select {
     font-size: var(--font-sm) !important;
     padding: 4px 8px;
-    min-height: 32px;
-    flex: 1 1 calc(50% - var(--space-xs));
-    min-width: 130px;
+    min-height: 36px;
+    min-width: 0;
     max-width: none;
-    width: auto;
+    width: 100%;
     border-radius: var(--radius-md);
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
+}
+html.cl-mobile .provider-order-item .provider-order-defaults select:only-of-type {
+    grid-column: 1 / -1;
+}
+html.cl-mobile .provider-order-item .provider-default-hide {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+    min-height: 36px;
+    padding: 4px 10px;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+    touch-action: manipulation;
+}
+html.cl-mobile .provider-order-item .provider-default-hide input {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin: 0;
 }
 html.cl-mobile .provider-order-item.provider-disabled {
     opacity: 0.55;

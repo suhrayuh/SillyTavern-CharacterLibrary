@@ -337,8 +337,9 @@ function buildModalHTML() {
                         <div class="ccss-editor">
                             <!-- Mobile-only drawer trigger; shows the active snippet name -->
                             <button class="ccss-drawer-trigger" id="ccssDrawerTrigger" type="button">
-                                <i class="fa-solid fa-bars"></i>
+                                <i class="fa-solid fa-layer-group"></i>
                                 <span class="ccss-drawer-trigger-label" id="ccssDrawerTriggerLabel">Snippets</span>
+                                <i class="fa-solid fa-chevron-down ccss-drawer-trigger-caret"></i>
                             </button>
                             <div class="ccss-editor-form" id="ccssEditorForm" hidden>
                                 <div class="ccss-editor-meta">
@@ -419,6 +420,7 @@ function setActiveMode(mode) {
     });
     modal.querySelector('.ccss-pane-snippets').hidden = mode !== MODE_SNIPPETS;
     modal.querySelector('.ccss-pane-raw').hidden = mode !== MODE_RAW;
+    modal.classList.toggle('ccss-mode-raw', mode === MODE_RAW);
     if (mode !== MODE_SNIPPETS) closeDrawer();
 
     const isSnippets = mode === MODE_SNIPPETS;
