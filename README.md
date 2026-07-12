@@ -133,7 +133,7 @@ These options apply when Embedded Panel mode is selected:
 - **Bulk localization** across your whole library from Settings, with progress tracking, abort, and history
 - **Optional provider gallery** inclusion in bulk localization
 - **Background media downloads** (opt-in): set **When an import has extra media** to **Download in the background** (**Settings → Media → Options**) and imports finish immediately while embedded media and gallery downloads run quietly, one character at a time, in a background queue. Track progress in the **notifications bell** in the topbar (**⋮ menu → Notifications** on mobile): live per-character progress, cancel, retry for failed jobs, and a clear-finished button. The queue survives page reloads and resumes automatically
-- **Grid card thumbnails** (opt-in) to cut decode cost and bandwidth on the characters grid. Enable in **Settings → Character Library → Grid Card Thumbnails**. By default thumbnails are served on mobile-sized viewports only; toggle "Also use on desktop" to extend coverage. With the [cl-helper plugin](#cl-helper-plugin-not-detected) installed, cl-helper resizes via jimp and caches each thumbnail on disk at a configurable size (384 / 512 / 640 / 768px wide). Without cl-helper, ST's built-in `/thumbnail` endpoint is used (fixed 96x144, can look blurry on high-DPR screens). Two cache management buttons: **Populate at current size** pre-generates a thumbnail for every character (skipping already-cached) and **Purge cache** deletes every cached thumbnail. The detail modal and gallery always use the full-resolution image
+- **Grid card thumbnails** (opt-in) to cut decode cost and bandwidth on the characters grid. Enable in **Settings → Character Library → Grid Card Thumbnails**. By default thumbnails are served in the mobile layout only; toggle "Also use on desktop" to extend coverage. With the [cl-helper plugin](#cl-helper-plugin-not-detected) installed, cl-helper resizes via jimp and caches each thumbnail on disk at a configurable size (384 / 512 / 640 / 768px wide). Without cl-helper, ST's built-in `/thumbnail` endpoint is used (fixed 96x144, can look blurry on high-DPR screens). Two cache management buttons: **Populate at current size** pre-generates a thumbnail for every character (skipping already-cached) and **Purge cache** deletes every cached thumbnail. The detail modal and gallery always use the full-resolution image
 
 > **Civitai API key** (optional): Required only for private or hidden Civitai posts. Public content extracts without a key. Configure in **Settings → Online → Civitai API Key**. Generate one at [civitai.com/user/account](https://civitai.com/user/account).
 
@@ -776,7 +776,7 @@ Licensed under the [GNU Affero General Public License v3](LICENSE).
 
 ## Fork-Specific Changes
 
-These changes were made on top of upstream Character Library v6.4.0.
+These changes were made on top of upstream Character Library v6.5.0.
 
 ### Always-Edit Setting
 
@@ -807,3 +807,32 @@ Integration with [SillyTavern-AlternateDescriptions](https://github.com/nbrown72
 - Token counts are calculated via SillyTavern's tokenizer
 - Data is read/written directly via `writeCardFields` and `applyCardFieldUpdates`
 - Lock integration: Alt. buttons are hidden when editing is locked
+
+### Saucepan Native Extraction
+
+Native Saucepan character extraction integrated into the DataCat browse provider, bypassing DataCat's server-side extraction service for open-definition Saucepan characters.
+
+- **Settings panel** under DataCat (Settings → Online → DataCat): login with Saucepan handle + password, or paste a Bearer token directly
+- Token validation tests the session against Saucepan's API and shows live status (Logged in / Not logged in)
+- **Source kind detection**: Saucepan characters are identified via `primary_content_source_kind === 'saucepan'` and handled through Saucepan-specific data paths
+- **Native import flow**: Saucepan characters with open definitions extract client-side via `fetchSaucepanCompanion()` and `submitSaucepanExtraction()` instead of relying on DataCat's queue
+- **Token persistence**: stored in Character Library settings and pushed to the cl-helper plugin for server-side token management
+- **Saucepan image CDN**: images resolve through Saucepan's CDN with `resolveSaucepanImageUrl()` for thumbnails and full-size downloads
+- **Proxy API**: Saucepan API requests are proxied through cl-helper's `/saucepan-proxy/` endpoint for CORS-free access
+
+#### Settings Controls
+- **Login**: handle + password fields with login button (saves a session token)
+- **Save Token**: paste an existing Bearer token directly
+- **Validate**: test the stored token against Saucepan's session API
+- **Clear Token**: removes the stored token and logs out
+- **Status badge**: shows "Logged in" / "Not logged in" with active/inactive styling, updated on login, save, validate, and clear
+
+### cl-helper Additions
+
+The bundled cl-helper plugin (`extras/cl-helper/index.js`) has fork-specific modifications:
+
+- **THUMB_EXTENSIONS expanded**: Added `bmp`, `avif`, `tiff?` to the accepted thumbnail format regex (upstream only supports `png|jpe?g|webp|gif`)
+- **hasBody extended**: Added `PUT` to the list of HTTP methods that include a request body (upstream only has `POST`)
+- **Saucepan proxy routes**: Handles Saucepan API proxying, token storage, session validation, login, and clear-session endpoints
+- **Saucepan token management**: Server-side Saucepan Bearer token storage with get/set/clear/test methods
+- **Saucepan extraction endpoint**: Accepts Saucepan companion URLs, fetches character data through Saucepan's API, and forwards extracted V2 card data back to the client
