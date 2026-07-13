@@ -11305,6 +11305,7 @@ const ALT_FIELD_CONFIGS = [
 // Used by Fix 6 (change detection -> "saved" toast) and Fix 3 (textarea monitoring).
 let _altFieldOpenData = null;
 let _altFieldMonitorHandler = null;
+let _altFieldNewIndex = -1;
 
 /**
  * Reliable check for whether a SillyTavern extension is actually ACTIVE
@@ -11398,6 +11399,18 @@ async function openAltDescriptionsPopup(saveKey) {
     const targetTextareaId = config.textareaIds.find(id => document.getElementById(id));
     const targetTextarea = targetTextareaId ? document.getElementById(targetTextareaId) : null;
 
+    // Auto-register the current field as the first alternate when none exist yet
+    // (mirrors upstream AlternateDescriptions auto-save on first open). This makes
+    // the live "main" field render as "In Use" instead of prompting a manual save.
+    if (entries.length === 0) {
+        const currentContent = (targetTextarea?.value || '').trim();
+        if (currentContent) {
+            const seeded = [{ title: `${config.label} #1`, content: currentContent }];
+            saveAltFieldData(saveKey, seeded);
+            entries = getAltFieldData(saveKey);
+        }
+    }
+
     document.getElementById('altModalTitle').textContent = `Alternate ${config.label} for ${charName}`;
 
     const modal = document.getElementById('altDescriptionsModal');
@@ -11432,11 +11445,15 @@ async function openAltDescriptionsPopup(saveKey) {
     addBtn.onclick = () => {
         const currentData = getAltFieldData(saveKey);
         const currentContent = targetTextarea?.value || '';
+        const newIndex = currentData.length;
         currentData.push({
             title: `${config.label} #${currentData.length + 1}`,
             content: currentContent,
         });
         saveAltFieldData(saveKey, currentData);
+        // Newly added alternates are NOT "In Use" by default — only the entry the
+        // field was actually loaded from should keep that badge.
+        _altFieldNewIndex = newIndex;
         renderAltFieldList(listEl, saveKey, config, targetTextarea);
     };
 
@@ -11492,8 +11509,10 @@ function renderAltFieldStatus(saveKey, config, targetTextarea) {
         if (saveBtn) {
             saveBtn.onclick = () => {
                 const data = getAltFieldData(saveKey);
+                const newIndex = data.length;
                 data.push({ title: `${config.label} #${data.length + 1}`, content: currentContent });
                 saveAltFieldData(saveKey, data);
+                _altFieldNewIndex = newIndex;
                 const listEl = document.getElementById('alt-field-list');
                 renderAltFieldList(listEl, saveKey, config, targetTextarea);
             };
@@ -11549,7 +11568,9 @@ function renderAltFieldList(listEl, saveKey, config, targetTextarea) {
 
     listEl.innerHTML = entries.map((entry, i) => {
         const entryContent = (entry.content || '').trim();
-        const isActive = entryContent === currentContent;
+        // A freshly added entry matches the field by definition; don't flag it
+        // "In Use" — only the entry the field was actually loaded from should.
+        const isActive = (i === _altFieldNewIndex) ? false : (entryContent === currentContent);
         return `
         <div class="alt-entry${isActive ? ' active-field' : ''}" data-index="${i}">
             <div class="alt-entry-top-row">
@@ -11633,6 +11654,10 @@ function renderAltFieldList(listEl, saveKey, config, targetTextarea) {
     listEl.querySelectorAll('.alt-entry-title, .alt-entry-content').forEach(el => {
         el.addEventListener('input', debouncedSave);
     });
+
+    // Consumed: the just-added entry has been rendered; clear so subsequent
+    // renders (Use / edit / live monitor) fall back to content-match logic.
+    _altFieldNewIndex = -1;
 }
 
 // =====================================================
