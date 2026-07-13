@@ -11823,6 +11823,18 @@ html.cl-initial-loading .mobile-fab {
     transition: all 0.2s;
 }
 
+/* Retro hard-offset shadow for dialog footer buttons (Add New / Done in the
+   Alternate Fields popup). Shadow is non-color (black alpha) so it respects
+   the user's accent theming via the .cl-btn-primary / .cl-btn-secondary fills. */
+.cl-modal-footer .cl-btn {
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
+}
+
+.cl-modal-footer .cl-btn:active {
+    box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+    transform: translate(2px, 2px);
+}
+
 /* Subordinate button size for inline / per-item actions inside a cl-modal.
    Use this for per-row editor controls, per-message chat actions, toolbar utility
    buttons, etc. Footer-level dialog buttons stay at the default .cl-btn tier. */
@@ -12541,5 +12553,37 @@ body.embedded-mode .logo-area {
     background: rgba(var(--cl-error-bright-rgb, 231, 76, 60), 0.15);
     border-color: var(--cl-error-bright, #e74c3c);
     color: var(--cl-danger-text, #ff6b7a);
+}
+
+/* Alt field status banner (mirrors upstream AlternateDescriptions checkFieldStatus) */
+#altDescriptionsModal .alt-field-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: var(--space-sm) 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: var(--font-sm);
+    border: 1px solid var(--glass-border);
+}
+
+#altDescriptionsModal .alt-field-status:empty {
+    display: none;
+}
+
+#altDescriptionsModal .alt-field-status--modified {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #ffc107;
+    color: #ffc107;
+}
+
+#altDescriptionsModal .alt-field-status--ok {
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4caf50;
+    color: #4caf50;
+}
+
+#altDescriptionsModal .alt-field-status .alt-save-current-btn {
+    margin-left: auto;
 }
 

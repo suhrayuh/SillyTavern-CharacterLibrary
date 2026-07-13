@@ -11120,10 +11120,12 @@ function populateNicknameEditor(containerId, char) {
     const ctx = getSTContext();
     if (!ctx) return;
 
-    // Check if Nicknames extension is installed
-    const hasNicknames = ctx.extensionSettings?.nicknames != null;
+    // Check if Nicknames extension is installed AND enabled (not just disabled in the menu).
+    // `extensionSettings?.nicknames != null` alone is insufficient: that settings entry
+    // persists after the extension is disabled, so it would wrongly report it as present.
+    const hasNicknames = isExtensionActive('third-party/SillyTavern-Nicknames', { settingsKey: 'nicknames' });
     if (!hasNicknames) {
-        container.innerHTML = `<small class="opacity50p"><i class="fa-solid fa-puzzle-piece"></i> Install <strong>SillyTavern-Nicknames</strong> to set custom nicknames for this character.</small>`;
+        container.innerHTML = `<small class="opacity50p"><i class="fa-solid fa-puzzle-piece"></i> Install <a href="https://github.com/SillyTavern/SillyTavern-Nicknames" target="_blank" rel="noopener noreferrer"><strong>SillyTavern-Nicknames</strong></a> to set custom nicknames for this character.</small>`;
         return;
     }
 
@@ -11299,16 +11301,59 @@ const ALT_FIELD_CONFIGS = [
     { saveKey: 'alt_post_history',      label: 'Post-History Instructions', textareaIds: ['editPostHistoryInstructions', 'creatorPostHistory'] },
 ];
 
-function isAlternateFieldsInstalled() {
+// Baseline snapshot + live-monitor handle for the Alt Fields popup session.
+// Used by Fix 6 (change detection -> "saved" toast) and Fix 3 (textarea monitoring).
+let _altFieldOpenData = null;
+let _altFieldMonitorHandler = null;
+
+/**
+ * Reliable check for whether a SillyTavern extension is actually ACTIVE
+ * (installed AND not disabled in the extensions menu).
+ *
+ * ST tracks disabled extensions in `extension_settings.disabledExtensions`,
+ * which stores the full internal id (e.g. "third-party/SillyTavern-AlternateDescriptions").
+ * A bare `extensionSettings?.someKey != null` check is NOT sufficient: that settings
+ * entry persists even after the extension is disabled in the menu, so it would report
+ * the extension as present when it is in fact off. We therefore combine:
+ *   - disabled = id is in disabledExtensions
+ *   - installed = disabled (implies it exists) OR a settings key is present
+ *     OR the extension's DOM side-effect is visible in the parent document
+ * (AlternateDescriptions has no settings key of its own, so we rely on its
+ * `.alt_fields_button` injection, which only happens when it is loaded+enabled.)
+ *
+ * @param {string} extId - Full internal id, e.g. "third-party/SillyTavern-AlternateDescriptions"
+ * @param {{settingsKey?: string, domSelector?: string}} [opts]
+ * @returns {boolean}
+ */
+function isExtensionActive(extId, { settingsKey, domSelector } = {}) {
     const ctx = getSTContext();
-    if (!ctx) return false;
-    return typeof ctx.writeExtensionField === 'function';
+    const disabled = ctx?.extensionSettings?.disabledExtensions || [];
+    const isDisabled = disabled.includes(extId);
+    // If it's in disabledExtensions it definitely exists; otherwise probe for a
+    // settings entry or a live DOM side-effect (the extension's own injection).
+    let installed = isDisabled;
+    if (!installed) {
+        if (settingsKey != null && ctx?.extensionSettings?.[settingsKey] != null) {
+            installed = true;
+        } else if (domSelector && typeof parent !== 'undefined' && parent?.document) {
+            try { installed = !!parent.document.querySelector(domSelector); } catch (_) { /* cross-origin */ }
+        }
+    }
+    return installed && !isDisabled;
+}
+
+function isAlternateFieldsInstalled() {
+    return isExtensionActive('third-party/SillyTavern-AlternateDescriptions', { domSelector: '.alt_fields_button' });
 }
 
 function initAltFieldButtons() {
     const buttons = document.querySelectorAll('.alt-field-btn');
-    buttons.forEach(btn => btn.classList.remove('hidden'));
+    // Only surface the Alt Fields buttons when the AlternateDescriptions extension
+    // is actually installed + enabled. Otherwise users just see the plain main field.
+    const active = isAlternateFieldsInstalled();
     buttons.forEach(btn => {
+        btn.classList.toggle('hidden', !active);
+        if (!active) return;
         btn.addEventListener('click', () => {
             const saveKey = btn.dataset.saveKey;
             if (saveKey) openAltDescriptionsPopup(saveKey);
@@ -11365,10 +11410,24 @@ async function openAltDescriptionsPopup(saveKey) {
         <div class="alt-popup-intro">
             <small class="opacity50p">Save different versions of this field. Click <strong>Use</strong> to load an alternate into the editor, then save the character.</small>
         </div>
+        <div id="alt-field-status"></div>
         <div id="alt-field-list"></div>`;
 
     const listEl = document.getElementById('alt-field-list');
     renderAltFieldList(listEl, saveKey, config, targetTextarea);
+
+    // Fix 3: live-monitor the underlying field. When it changes we refresh the
+    // status banner and the active/Use indicators without rebuilding the list
+    // (mirrors upstream AlternateDescriptions setupFieldMonitoring).
+    _altFieldOpenData = getAltFieldData(saveKey);
+    if (targetTextarea) {
+        _altFieldMonitorHandler = () => {
+            renderAltFieldStatus(saveKey, config, targetTextarea);
+            refreshAltFieldActiveIndicators(listEl, saveKey, targetTextarea);
+        };
+        targetTextarea.addEventListener('input', _altFieldMonitorHandler);
+        targetTextarea.addEventListener('paste', _altFieldMonitorHandler);
+    }
 
     addBtn.onclick = () => {
         const currentData = getAltFieldData(saveKey);
@@ -11381,7 +11440,22 @@ async function openAltDescriptionsPopup(saveKey) {
         renderAltFieldList(listEl, saveKey, config, targetTextarea);
     };
 
-    const hideModal = () => modal.classList.remove('visible');
+    const hideModal = () => {
+        // Fix 3: detach the live-monitor listeners so they don't leak.
+        if (targetTextarea && _altFieldMonitorHandler) {
+            targetTextarea.removeEventListener('input', _altFieldMonitorHandler);
+            targetTextarea.removeEventListener('paste', _altFieldMonitorHandler);
+            _altFieldMonitorHandler = null;
+        }
+        // Fix 6: report alt-field edits made during this popup session.
+        try {
+            const open = JSON.stringify(_altFieldOpenData || []);
+            const now = JSON.stringify(getAltFieldData(saveKey));
+            if (open !== now) showToast('Alternate fields saved', 'success');
+        } catch (_) { /* ignore */ }
+        _altFieldOpenData = null;
+        modal.classList.remove('visible');
+    };
     doneBtn.onclick = hideModal;
     closeBtn.onclick = hideModal;
     modal.onclick = (e) => { if (e.target === modal) hideModal(); };
@@ -11389,8 +11463,83 @@ async function openAltDescriptionsPopup(saveKey) {
     modal.classList.add('visible');
 }
 
+/**
+ * Renders the "current field vs saved alternates" status banner inside the
+ * Alternate Fields popup. Mirrors the upstream AlternateDescriptions extension:
+ * when the live field diverges from every saved alternate, prompt to "Save Current".
+ * @param {string} saveKey
+ * @param {object} config - entry from ALT_FIELD_CONFIGS
+ * @param {HTMLTextAreaElement|null} targetTextarea
+ */
+function renderAltFieldStatus(saveKey, config, targetTextarea) {
+    const statusEl = document.getElementById('alt-field-status');
+    if (!statusEl) return;
+
+    const currentContent = (targetTextarea?.value || '').trim();
+    const entries = getAltFieldData(saveKey);
+    const hasMatch = entries.some(e => (e.content || '').trim() === currentContent);
+
+    if (!hasMatch && currentContent) {
+        // Current field has been edited and no longer matches any saved alternate.
+        statusEl.className = 'alt-field-status alt-field-status--modified';
+        statusEl.innerHTML = `
+            <i class="fa-solid fa-exclamation-triangle"></i>
+            <span>Current ${config.label} has been modified and doesn't match any saved version.</span>
+            <button type="button" class="cl-btn cl-btn-secondary alt-save-current-btn" style="margin-left: auto; font-size: 12px; padding: 4px 10px;">
+                <i class="fa-solid fa-save"></i><span>Save Current</span>
+            </button>`;
+        const saveBtn = statusEl.querySelector('.alt-save-current-btn');
+        if (saveBtn) {
+            saveBtn.onclick = () => {
+                const data = getAltFieldData(saveKey);
+                data.push({ title: `${config.label} #${data.length + 1}`, content: currentContent });
+                saveAltFieldData(saveKey, data);
+                const listEl = document.getElementById('alt-field-list');
+                renderAltFieldList(listEl, saveKey, config, targetTextarea);
+            };
+        }
+    } else if (hasMatch) {
+        statusEl.className = 'alt-field-status alt-field-status--ok';
+        statusEl.innerHTML = `
+            <i class="fa-solid fa-check-circle"></i>
+            <span>Current ${config.label} matches a saved version.</span>`;
+    } else {
+        statusEl.className = 'alt-field-status';
+        statusEl.innerHTML = '';
+    }
+}
+
+/**
+ * Lightweight refresh of the active-field highlight + Use-button state on every
+ * alt entry, comparing each saved entry's content against the live field value.
+ * Avoids a full re-render (which would drop focus while editing an entry).
+ * @param {HTMLElement} listEl
+ * @param {string} saveKey
+ * @param {HTMLTextAreaElement|null} targetTextarea
+ */
+function refreshAltFieldActiveIndicators(listEl, saveKey, targetTextarea) {
+    if (!listEl) return;
+    const currentContent = (targetTextarea?.value || '').trim();
+    const entries = getAltFieldData(saveKey);
+    listEl.querySelectorAll('.alt-entry').forEach((item, i) => {
+        const entryContent = ((entries[i]?.content) || '').trim();
+        const isActive = entryContent === currentContent;
+        item.classList.toggle('active-field', isActive);
+        const useBtn = item.querySelector('.alt-use-btn');
+        if (useBtn) {
+            useBtn.classList.toggle('active', isActive);
+            useBtn.title = isActive ? 'Already in use' : 'Load into editor';
+            const span = useBtn.querySelector('span');
+            const icon = useBtn.querySelector('i');
+            if (span) span.textContent = isActive ? 'In Use' : 'Use';
+            if (icon) icon.className = isActive ? 'fa-solid fa-check' : 'fa-solid fa-arrow-up';
+        }
+    });
+}
+
 function renderAltFieldList(listEl, saveKey, config, targetTextarea) {
     const entries = getAltFieldData(saveKey);
+    renderAltFieldStatus(saveKey, config, targetTextarea);
     if (!entries.length) {
         listEl.innerHTML = `<div class="justifyLeft" style="padding: 12px;"><small class="opacity50p">No alternate versions saved yet. Click <strong>Add New</strong> to save the current field content as the first alternate.</small></div>`;
         return;
@@ -11420,14 +11569,17 @@ function renderAltFieldList(listEl, saveKey, config, targetTextarea) {
 
     entries.forEach((entry, i) => {
         const tokenEl = listEl.querySelector(`.alt-entry-tokens[data-token-idx="${i}"]`);
-        if (!tokenEl || !entry.content) { if (tokenEl) tokenEl.textContent = '0 tok'; return; }
+        if (!tokenEl) return;
+        if (!entry.content) { tokenEl.textContent = '0 tok'; return; }
+        // Fix 5: robust token counting — guard the call and degrade gracefully.
         const ctx = getSTContext();
-        if (ctx?.getTokenCountAsync) {
-            ctx.getTokenCountAsync(entry.content).then(count => {
-                tokenEl.textContent = count != null ? `${count} tok` : '—';
-            }).catch(() => { tokenEl.textContent = '—'; });
+        if (ctx && typeof ctx.getTokenCountAsync === 'function') {
+            Promise.resolve()
+                .then(() => ctx.getTokenCountAsync(entry.content))
+                .then(count => { tokenEl.textContent = (count != null && !isNaN(count)) ? `${count} tok` : '—'; })
+                .catch(() => { tokenEl.textContent = '—'; });
         } else {
-            tokenEl.textContent = Math.ceil(entry.content.length / 4) + ' tok';
+            tokenEl.textContent = Math.ceil((entry.content || '').length / 4) + ' tok';
         }
     });
 
@@ -11436,12 +11588,18 @@ function renderAltFieldList(listEl, saveKey, config, targetTextarea) {
             if (btn.classList.contains('active')) return;
             const idx = parseInt(btn.dataset.index);
             const data = getAltFieldData(saveKey);
-            if (data[idx] && targetTextarea) {
-                targetTextarea.value = data[idx].content || '';
-                targetTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                renderAltFieldList(listEl, saveKey, config, targetTextarea);
-                showToast?.(`Loaded "${data[idx].title || 'alternate'}" into the field`, 'success');
+            if (!data[idx] || !targetTextarea) return;
+            // Fix 4: warn before overwriting an unsaved field edit (mirrors upstream).
+            const currentContent = (targetTextarea.value || '').trim();
+            const hasUnsavedChanges = currentContent && !data.some(e => (e.content || '').trim() === currentContent);
+            if (hasUnsavedChanges) {
+                const ok = confirm(`Your current ${config.label} has unsaved changes. Switch to this ${config.label} anyway?`);
+                if (!ok) return;
             }
+            targetTextarea.value = data[idx].content || '';
+            targetTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            renderAltFieldList(listEl, saveKey, config, targetTextarea);
+            showToast?.(`Loaded "${data[idx].title || 'alternate'}" into the field`, 'success');
         });
     });
 
