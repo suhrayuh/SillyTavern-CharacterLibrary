@@ -448,7 +448,7 @@ Providers with Following support include a **Followed Creators Manager** panel f
 | Character Linking | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Gallery Downloads | ✅ | -- | -- | ✅ | ✅ | ✅ | -- | ✅ |
 | Remote Version History | ✅ | -- | -- | -- | -- | -- | -- | -- |
-| Following / Timeline | ✅ | -- | -- | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Following / Timeline | ✅ | -- | -- | ✅ | ✅ | -- | ✅ | ✅ |
 | Favorites | ✅ | -- | -- | -- | -- | -- | -- | ✅ |
 | Auth Required | Optional | None | Optional | Optional | Optional | Optional | None | Optional (NSFW needs login) |
 
@@ -620,8 +620,7 @@ Saucepan is a first-class character provider. It offers native, token-backed ext
 
 - Browse and search by New, Trending, or Popular
 - Search by character name, Saucepan UUID, or a full `saucepan.ai/companion/<id>` URL
-- **Creator search**: paste a Saucepan creator handle (`@handle`), bare handle, or a `saucepan.ai/@handle` profile URL to browse all their companions
-- **Following tab** tracks the Saucepan creators you follow locally in Character Library
+- Creator names link to their public `saucepan.ai/u/<handle>` profiles
 - **Tri-state tags**: cycle each tag Neutral → Include → Exclude
 - Filter by **SFW/NSFW**, **Open Definitions only** or **All Definitions**, hide owned, hide possible matches
 - **In-app character preview** with creator notes, description, scenario, examples, first message, alternate greetings, linked lorebooks, and Saucepan portrait gallery
@@ -841,15 +840,15 @@ Integration with [SillyTavern-AlternateDescriptions](https://github.com/nbrown72
 
 Saucepan is promoted to a standalone first-class provider alongside ChubAI, Wyvern, and DataCat in the provider dropdown. Previously it was surfaced only as a sort mode inside the experimental DataCat provider.
 
-- **Dedicated provider** with its own [Browse → Following → Creator Drilldown → Preview → Import] flow
+- **Dedicated provider** with its own [Browse → Preview → Import] flow
 - **Unique DOM IDs** (`saucepan*`) independent of DataCat's overlay/model/modular state
 - **Canonical ownership** uses `extensions.saucepan = { id, creatorId, creatorName, pageName, linkedAt }`
 - **Legacy compatibility**: cards with `extensions.datacat.sourceKind === 'saucepan'` are immediately recognized and route through Saucepan without a mass-rewrite
 - **Lazy migration**: legacy metadata is removed only on update, reimport, or relink; all new imports emit canonical metadata
 - **Native-first card resolver**: native Saucepan extraction with token → DataCat download fallback → DataCat metadata fallback, exposed through `resolveSaucepanCard()` in `modules/providers/saucepan/saucepan-card-service.js`
-- **Dedicated settings**: Saucepan account controls, following, and defaults live in their own settings section (`#settingsSaucepanSection`); follows migrate idempotently from DataCat at startup
+- **Dedicated settings**: Saucepan account controls and provider defaults live in their own settings section (`#settingsSaucepanSection`)
 - **DataCat integration**: DataCat still displays incidental Saucepan-origin aggregate rows with the `S` badge and **Hide Saucepan** filter, but all clicks, imports, and ownership delegate to the Saucepan provider
-- **Creator batch adapter**: downloads through `CoreAPI.getProvider('saucepan')`, not DataCat
+- **Creator links** open public Saucepan profiles; creator drilldown/following is intentionally unavailable because Saucepan has no supported companion-list API
 - **Provider logo**: official Saucepan SVG vendored at `modules/providers/saucepan/assets/saucepan-logo.svg`
 - **Lorebooks**: Characters with public lorebooks are imported to the library with their lorebooks automatically embedded and linked
 

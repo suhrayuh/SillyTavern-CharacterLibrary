@@ -856,6 +856,9 @@ function registerCharacterTavernRoutes(router) {
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json',
+            // Avoid zstd here: Node/Bun support varies, while these encodings are
+            // supported by the byte-aware decoder below.
+            'Accept-Encoding': 'gzip, deflate, br',
         };
         if (ctSessionCookies) {
             headers['Cookie'] = ctSessionCookies;
@@ -869,16 +872,35 @@ function registerCharacterTavernRoutes(router) {
             });
 
             const contentType = response.headers.get('content-type') || '';
+            const contentEncoding = (response.headers.get('content-encoding') || '').toLowerCase();
+            let buffer = Buffer.from(await response.arrayBuffer());
+
+            // fetch implementations differ: some transparently decompress while
+            // retaining Content-Encoding, others expose the compressed bytes.
+            // Inspect the bytes first and fall back to the header; if decompression
+            // fails, the body was already decoded and is safe to forward unchanged.
+            const isGzip = buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
+            const isZlib = buffer.length >= 2 && buffer[0] === 0x78 && (((buffer[0] << 8) + buffer[1]) % 31 === 0);
+            const isZstd = buffer.length >= 4 && buffer[0] === 0x28 && buffer[1] === 0xb5 && buffer[2] === 0x2f && buffer[3] === 0xfd;
+            try {
+                if (isZstd || contentEncoding.includes('zstd')) {
+                    buffer = await getZstdDecompressAsync()(buffer, { maxOutputLength: SAUCEPAN_MAX_BYTES });
+                } else if (isGzip || contentEncoding.includes('gzip')) {
+                    buffer = await promisify(zlib.gunzip)(buffer);
+                } else if (isZlib || contentEncoding.includes('deflate')) {
+                    buffer = await promisify(zlib.inflate)(buffer);
+                } else if (contentEncoding.includes('br')) {
+                    buffer = await promisify(zlib.brotliDecompress)(buffer);
+                }
+            } catch {
+                // Already decompressed by fetch; keep the original bytes.
+            }
+
             res.status(response.status);
             res.set('Content-Type', contentType);
-
-            if (contentType.includes('application/json')) {
-                const text = await response.text();
-                res.send(text);
-            } else {
-                const buffer = Buffer.from(await response.arrayBuffer());
-                res.send(buffer);
-            }
+            res.removeHeader('Content-Encoding');
+            res.removeHeader('Content-Length');
+            res.send(buffer);
         } catch (err) {
             console.error('[cl-helper] CT proxy error:', err.message);
             res.status(502).json({ error: 'Failed to reach CharacterTavern' });

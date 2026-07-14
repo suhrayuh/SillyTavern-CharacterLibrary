@@ -28,6 +28,7 @@ export const CT_SORT_OPTIONS = {
 // ========================================
 
 import { fetchWithProxy } from '../provider-utils.js';
+import { parseCharacterTavernJson } from './chartavern-response.js';
 export { fetchWithProxy };
 
 // ========================================
@@ -140,8 +141,9 @@ export function isCtSessionActive() {
  * @returns {Promise<Response>}
  */
 async function ctFetch(url, apiRequest) {
-    if (ctSessionActive && apiRequest) {
-        // Route through cl-helper proxy: strip the CT origin, prepend proxy path
+    if (apiRequest) {
+        // CharacterTavern does not allow browser CORS requests. Always route API
+        // reads through cl-helper when available; stored cookies are optional.
         const path = url.replace(CT_SITE_BASE, '');
         const resp = await apiRequest(`${CL_HELPER_CT_BASE}/ct-proxy${path}`);
         return resp;
@@ -198,7 +200,7 @@ export async function searchCards(opts = {}, apiRequest) {
     if (!resp.ok) {
         throw new Error(`CT search returned HTTP ${resp.status}`);
     }
-    return resp.json();
+    return parseCharacterTavernJson(resp, 'search');
 }
 
 /**
@@ -214,18 +216,19 @@ export async function fetchCharacterDetail(author, slug, apiRequest) {
     if (!resp.ok) {
         throw new Error(`CT detail returned HTTP ${resp.status}`);
     }
-    return resp.json();
+    return parseCharacterTavernJson(resp, 'detail');
 }
 
 /**
  * Fetch top tags from /api/catalog/top-tags
+ * @param {Function} [apiRequest] - CoreAPI.apiRequest for the CORS-safe proxy
  * @returns {Promise<Array<{tag: string, count: number}>>}
  */
-export async function fetchTopTags() {
+export async function fetchTopTags(apiRequest) {
     const url = `${CT_API_BASE}/catalog/top-tags`;
-    const resp = await fetchWithProxy(url);
+    const resp = await ctFetch(url, apiRequest);
     if (!resp.ok) throw new Error(`Top tags fetch failed (${resp.status})`);
-    return resp.json();
+    return parseCharacterTavernJson(resp, 'top tags');
 }
 
 // ========================================

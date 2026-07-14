@@ -7734,9 +7734,9 @@ function showToast(message, type = 'info', duration = 3000) {
 }
 
 // @canonical cl-confirm-overlay
-// Singleton confirmation dialog. Returns a Promise<boolean> resolving to
-// true when confirmed, false when cancelled (Keep button, backdrop click,
-// Escape, or back button via overlay registry).
+// Singleton confirmation dialog. Resolves true when confirmed and false when
+// cancelled (button, backdrop, Escape, or back). Callers may optionally expose
+// a third action with alternateLabel/alternateValue.
 function showConfirm({
     title = 'Confirm',
     message = '',
@@ -7745,6 +7745,9 @@ function showConfirm({
     iconColor = '',
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
+    alternateLabel = '',
+    alternateValue = 'alternate',
+    alternateDanger = false,
     danger = false,
 } = {}) {
     let overlay = document.getElementById('clConfirmOverlay');
@@ -7763,15 +7766,18 @@ function showConfirm({
                 </div>
                 <div class="confirm-modal-footer">
                     <button type="button" class="action-btn secondary" id="clConfirmCancelBtn"></button>
+                    <button type="button" class="action-btn hidden" id="clConfirmAlternateBtn"></button>
                     <button type="button" class="action-btn" id="clConfirmConfirmBtn"></button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
 
         const cancelFn = () => { overlay.classList.add('hidden'); overlay._resolve?.(false); };
+        const alternateFn = () => { overlay.classList.add('hidden'); overlay._resolve?.(overlay._alternateValue); };
         const confirmFn = () => { overlay.classList.add('hidden'); overlay._resolve?.(true); };
 
         document.getElementById('clConfirmCancelBtn').addEventListener('click', cancelFn);
+        document.getElementById('clConfirmAlternateBtn').addEventListener('click', alternateFn);
         document.getElementById('clConfirmConfirmBtn').addEventListener('click', confirmFn);
         overlay.addEventListener('click', e => { if (e.target === overlay) cancelFn(); });
 
@@ -7789,9 +7795,11 @@ function showConfirm({
     const msgEl = document.getElementById('clConfirmMessage');
     const iconEl = document.getElementById('clConfirmIcon');
     const cancelBtn = document.getElementById('clConfirmCancelBtn');
+    const alternateBtn = document.getElementById('clConfirmAlternateBtn');
     const confirmBtn = document.getElementById('clConfirmConfirmBtn');
     // Intent badge: red for destructive, accent otherwise. Caller icon overrides the glyph.
     overlay.classList.toggle('cl-confirm-danger', !!danger);
+    overlay.classList.toggle('cl-confirm-three-actions', !!alternateLabel);
     if (iconEl) {
         iconEl.className = icon || (danger ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-circle-question');
         iconEl.style.color = iconColor || '';
@@ -7803,6 +7811,13 @@ function showConfirm({
         msgEl.style.display = (messageHtml != null || message) ? '' : 'none';
     }
     if (cancelBtn) cancelBtn.textContent = cancelLabel;
+    if (alternateBtn) {
+        alternateBtn.textContent = alternateLabel;
+        alternateBtn.classList.toggle('hidden', !alternateLabel);
+        alternateBtn.classList.toggle('danger', !!alternateDanger);
+        alternateBtn.classList.toggle('secondary', !alternateDanger);
+    }
+    overlay._alternateValue = alternateValue;
     if (confirmBtn) {
         confirmBtn.textContent = confirmLabel;
         confirmBtn.classList.toggle('danger', !!danger);
@@ -10656,21 +10671,41 @@ function isCharModalDirty() {
     }
 }
 
-function confirmDiscardCharModalEdits() {
-    return showConfirm({
-        title: 'Discard unsaved edits?',
-        message: `You have unsaved changes to ${getCharacterName(activeChar) || 'this character'}. Discard them?`,
-        confirmLabel: 'Discard',
+async function resolveUnsavedCharModalEdits() {
+    const characterName = getCharacterName(activeChar) || 'this character';
+    const action = await showConfirm({
+        title: 'Unsaved edits',
+        message: `You have unsaved changes to ${characterName}. Save them before continuing?`,
+        icon: 'fa-solid fa-pen-to-square',
+        confirmLabel: 'Save',
         cancelLabel: 'Keep Editing',
-        danger: true,
+        alternateLabel: 'Discard',
+        alternateValue: 'discard',
+        alternateDanger: true,
     });
+
+    if (action === 'discard') return 'discard';
+    if (action !== true) return 'cancel';
+
+    try {
+        const prepared = prepareCharacterSave();
+        if (!prepared || (prepared.changes.length === 0 && !prepared.hasAvatarChange)) {
+            pendingUpdates = null;
+            return 'save';
+        }
+        return await performSave() ? 'save' : 'cancel';
+    } catch (error) {
+        console.error('[Edit] Immediate save failed:', error);
+        showToast(`Could not save character: ${error.message}`, 'error');
+        return 'cancel';
+    }
 }
 
 // User-initiated close. Programmatic closers (post-delete cleanup, save success) keep calling closeModal directly.
 async function maybeCloseModal() {
     if (isCharModalDirty()) {
-        const ok = await confirmDiscardCharModalEdits();
-        if (!ok) return;
+        const action = await resolveUnsavedCharModalEdits();
+        if (action === 'cancel') return;
     }
     closeModal();
 }
@@ -10697,8 +10732,8 @@ async function openModal(char, { navList } = {}) {
     // Fresh open picks the nav source; swaps/steps pass no navList so the session's source persists while paging.
     if (!isSwap) modalNavList = navList ?? null;
     if (isSwap && isCharModalDirty()) {
-        const ok = await confirmDiscardCharModalEdits();
-        if (!ok) return;
+        const action = await resolveUnsavedCharModalEdits();
+        if (action === 'cancel') return;
     }
     if (isSwap) {
         setEditLock(!getSetting('alwaysEditEnabled'));
@@ -13429,18 +13464,12 @@ function truncateText(text, maxLength) {
     return text.substring(0, maxLength) + '...';
 }
 
-// Show confirmation modal with diff
-function showSaveConfirmation() {
-    if (!activeChar) return;
-    
+function prepareCharacterSave() {
+    if (!activeChar) return null;
+
     const currentValues = collectEditValues();
     const changes = generateChangesDiff(originalValues, currentValues);
     const hasAvatarChange = !!pendingAvatarFile;
-    
-    if (changes.length === 0 && !hasAvatarChange) {
-        showToast("No changes detected", "info");
-        return;
-    }
 
     // Tagline and listing name as leaf writes so the namespace's sibling fields (id, full_path, linkedAt) survive the spread.
     const activeNs = window.ProviderRegistry?.getActiveTaglineNamespace?.(activeChar) ?? 'cl';
@@ -13463,6 +13492,21 @@ function showSaveConfirmation() {
         [`extensions.${activeNs}.tagline`]: currentValues.tagline ?? '',
         [`extensions.${activeNs}.pageName`]: currentValues.listingName ?? '',
     };
+
+    return { changes, hasAvatarChange };
+}
+
+// Show confirmation modal with diff
+function showSaveConfirmation() {
+    const prepared = prepareCharacterSave();
+    if (!prepared) return;
+    const { changes, hasAvatarChange } = prepared;
+
+    if (changes.length === 0 && !hasAvatarChange) {
+        pendingUpdates = null;
+        showToast("No changes detected", "info");
+        return;
+    }
     
     // Build diff HTML
     const diffContainer = document.getElementById('changesDiff');
@@ -13489,16 +13533,17 @@ function showSaveConfirmation() {
 
 // Actually perform the save
 async function performSave() {
-    if (!activeChar || !pendingUpdates) return;
+    if (!activeChar || !pendingUpdates) return false;
 
     if (activeChar._slim) {
         await hydrateCharacter(activeChar);
-        if (activeChar._slim) { showToast('Card data still loading, please try again', 'warning'); return; }
+        if (activeChar._slim) { showToast('Card data still loading, please try again', 'warning'); return false; }
     }
 
     // Re-entrancy guard: a double-tap Confirm Save must not run two concurrent snapshot+write+upload passes.
-    if (_saveInProgress) return;
+    if (_saveInProgress) return false;
     _saveInProgress = true;
+    let saveSucceeded = false;
 
     const hasAvatarChange = !!pendingAvatarFile;
 
@@ -13615,6 +13660,7 @@ async function performSave() {
             // Fetch from server for full sync (in background)
             // forceRefresh avoids stale opener data overwriting recent changes
             fetchCharacters(true);
+            saveSucceeded = true;
         } else {
             const err = writeResult.response ? await writeResult.response.text().catch(() => '') : '';
             showToast("Error saving: " + (err || 'unknown'), "error");
@@ -13624,6 +13670,7 @@ async function performSave() {
     } finally {
         _saveInProgress = false;
     }
+    return saveSucceeded;
 }
 
 // Heavy Details-tab fields: description, first message, alt greetings, embedded lorebook,
@@ -14536,8 +14583,8 @@ function initSectionExpandButtons() {
             const worldName = activeChar?.data?.extensions?.world;
             if (!worldName) return;
             if (isCharModalDirty()) {
-                const ok = await confirmDiscardCharModalEdits();
-                if (!ok) return;
+                const action = await resolveUnsavedCharModalEdits();
+                if (action === 'cancel') return;
             }
             closeModal();
             window.openLorebookManager?.(worldName);

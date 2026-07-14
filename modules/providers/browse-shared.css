@@ -1004,7 +1004,12 @@ h2.browse-title-scroll-end {
 }
 
 .browse-login-body {
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
 }
 
 .browse-login-info {
@@ -1663,7 +1668,7 @@ body.collapse-all-browse-sections
 }
 
 .browse-more-filters > .glass-btn.has-filters i {
-    color: var(--cl-error-bright);
+    color: var(--text-secondary);
 }
 
 /* Favorite filter - only visible when logged in */
@@ -2164,7 +2169,10 @@ html.cl-mobile .browse-stat-identity span {
 html.cl-mobile .browse-login-modal {
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0 !important;
 }
-html.cl-mobile .browse-login-body { padding: 14px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+html.cl-mobile .browse-login-body {
+    padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
+}
 html.cl-mobile .browse-login-info { font-size: var(--font-md); padding: 12px; }
 html.cl-mobile .browse-login-actions { flex-wrap: wrap; }
 html.cl-mobile .browse-login-form .glass-input { font-size: var(--mobile-input-size); }

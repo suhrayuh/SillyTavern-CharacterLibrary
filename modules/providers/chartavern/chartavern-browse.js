@@ -897,7 +897,7 @@ function markCardAsImported(path) {
 async function loadTopTags() {
     if (ctTopTagsFetched) return;
     try {
-        ctTopTags = await fetchTopTags();
+        ctTopTags = await fetchTopTags(apiRequest);
         ctTopTagsFetched = true;
     } catch (e) {
         console.warn('[CTBrowse] Failed to fetch top tags:', e.message);

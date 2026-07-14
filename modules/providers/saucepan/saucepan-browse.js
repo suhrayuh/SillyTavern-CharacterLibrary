@@ -12,7 +12,6 @@ import {
     skeletonLines,
 } from '../provider-utils.js';
 import {
-    fetchSaucepanCompanionsOfUser,
     fetchSaucepanLorebookList,
     resolveSaucepanImageUrl,
     searchSaucepan,
@@ -47,7 +46,6 @@ const {
 } = CoreAPI;
 
 const PAGE_SIZE = 72;
-const FOLLOWING_PAGE_SIZE = 72;
 const CURATED_TAGS = [
     'anime', 'assistant', 'comedy', 'fantasy', 'female', 'game', 'historical',
     'horror', 'male', 'non-human', 'original-character', 'romance', 'roleplay',
@@ -70,50 +68,11 @@ function parseCompanionId(query) {
     return /^[0-9a-f]{8}-[0-9a-f-]{20,}$/i.test(value) ? value : '';
 }
 
-function parseCreatorHandle(query) {
-    const value = String(query || '').trim();
-    const urlMatch = value.match(/saucepan\.ai\/(?:profile\/|user\/|@)([A-Za-z0-9_.-]+)/i);
-    return (urlMatch?.[1] || value.replace(/^@/, '')).trim();
-}
-
-function sortCreatorCharacters(characters, sort) {
-    const list = [...characters];
-    switch (sort) {
-        case 'oldest': return list.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-        case 'popular': return list.sort((a, b) => getChatCount(b) - getChatCount(a));
-        case 'name_asc': return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        case 'name_desc': return list.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
-        default: return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    }
-}
-
-function normalizedFollow(entry, index = 0) {
-    if (!entry) return null;
-    if (typeof entry === 'string') {
-        const handle = parseCreatorHandle(entry);
-        return handle ? { id: handle.toLowerCase(), handle, name: handle, followedAt: index } : null;
-    }
-    const handle = parseCreatorHandle(entry.handle || entry.name || entry.username || '');
-    if (!handle) return null;
-    return {
-        id: String(entry.id || handle).toLowerCase(),
-        handle,
-        name: entry.name || handle,
-        avatar: entry.avatar || '',
-        characterCount: entry.characterCount,
-        followedAt: entry.followedAt ?? index,
-    };
-}
-
 export class SaucepanBrowseView extends BrowseView {
     constructor(provider) {
         super(provider);
         this._characters = [];
-        this._followingCharacters = [];
-        this._followingVisible = FOLLOWING_PAGE_SIZE;
-        this._mode = 'browse';
         this._sort = 'saucepan_new';
-        this._followingSort = 'newest';
         this._page = 1;
         this._totalPages = 0;
         this._hasMore = true;
@@ -121,8 +80,6 @@ export class SaucepanBrowseView extends BrowseView {
         this._loadToken = 0;
         this._active = false;
         this._search = '';
-        this._creator = null;
-        this._creatorFullList = [];
         this._openDefinitionsOnly = true;
         this._nsfw = false;
         this._hideOwned = false;
@@ -137,20 +94,14 @@ export class SaucepanBrowseView extends BrowseView {
     }
 
     get previewModalId() { return 'saucepanCharModal'; }
-    get hasModeToggle() { return true; }
-    get supportsFollowingManager() { return true; }
+    get hasModeToggle() { return false; }
 
     get mobileFilterIds() {
         return {
             sort: 'saucepanSortSelect',
-            timelineSort: 'saucepanFollowingSortSelect',
             tags: 'saucepanTagsBtn',
             filters: 'saucepanFiltersBtn',
-            nsfw: 'saucepanNsfwToggle',
             refresh: 'saucepanRefreshBtn',
-            modeBrowseSelector: '.saucepan-view-btn[data-saucepan-view="browse"]',
-            modeFollowSelector: '.saucepan-view-btn[data-saucepan-view="following"]',
-            modeBtnClass: 'saucepan-view-btn',
         };
     }
 
@@ -161,26 +112,14 @@ export class SaucepanBrowseView extends BrowseView {
                 { value: 'saucepan_trending', label: '🔥 Trending' },
                 { value: 'saucepan_popular', label: '👑 Popular' },
             ],
-            followingSortOptions: [
-                { value: 'newest', label: 'Newest' },
-                { value: 'oldest', label: 'Oldest' },
-                { value: 'popular', label: 'Popular' },
-                { value: 'name_asc', label: 'Name A-Z' },
-                { value: 'name_desc', label: 'Name Z-A' },
-            ],
-            viewModes: [
-                { value: 'browse', label: 'Browse' },
-                { value: 'following', label: 'Following' },
-            ],
+            viewModes: [{ value: 'browse', label: 'Browse' }],
         };
     }
 
-    getSearchModes() { return ['character', 'creator']; }
-    getSearchInputId(mode) {
-        return mode === 'creator' ? 'saucepanCreatorSearchInput' : 'saucepanSearchInput';
-    }
+    getSearchModes() { return ['character']; }
+    getSearchInputId() { return 'saucepanSearchInput'; }
 
-    _getImageGridIds() { return ['saucepanGrid', 'saucepanFollowingGrid']; }
+    _getImageGridIds() { return ['saucepanGrid']; }
 
     _extractProviderIds(char, idSet) {
         const extensions = char?.data?.extensions || char?.extensions || {};
@@ -207,40 +146,20 @@ export class SaucepanBrowseView extends BrowseView {
 
     canLoadMore() {
         if (this._loading) return false;
-        if (this._mode === 'following') return this._followingVisible < this._filteredFollowing().length;
-        if (this._creator) return this._characters.length < this._creatorFullList.length;
         return this._hasMore;
     }
 
     async loadMore() {
         if (!this.canLoadMore()) return;
-        if (this._mode === 'following') {
-            this._followingVisible += FOLLOWING_PAGE_SIZE;
-            this._renderFollowing(true);
-            return;
-        }
-        if (this._creator) {
-            const next = this._creatorFullList.slice(this._characters.length, this._characters.length + PAGE_SIZE);
-            this._characters.push(...next);
-            this._renderGrid(true);
-            return;
-        }
         this._page++;
         await this._loadBrowse(true);
     }
 
     renderFilterBar() {
         return `
-            <div class="saucepan-view-toggle">
-                <button class="saucepan-view-btn active" data-saucepan-view="browse" title="Browse Saucepan"><i class="fa-solid fa-compass"></i> <span>Browse</span></button>
-                <button class="saucepan-view-btn" data-saucepan-view="following" title="Characters from locally followed creators"><i class="fa-solid fa-users"></i> <span>Following</span></button>
-            </div>
             <div class="browse-sort-container">
                 <select id="saucepanSortSelect" class="glass-select" title="Sort Saucepan characters">
                     <option value="saucepan_new">🆕 New</option><option value="saucepan_trending">🔥 Trending</option><option value="saucepan_popular">👑 Popular</option>
-                </select>
-                <select id="saucepanFollowingSortSelect" class="glass-select hidden" title="Sort followed creators' characters">
-                    <option value="newest">Newest</option><option value="oldest">Oldest</option><option value="popular">Popular</option><option value="name_asc">Name A-Z</option><option value="name_desc">Name Z-A</option>
                 </select>
             </div>
             <div class="browse-tags-dropdown-container saucepan-dropdown-wrap">
@@ -253,13 +172,14 @@ export class SaucepanBrowseView extends BrowseView {
             <div class="browse-more-filters saucepan-dropdown-wrap">
                 <button id="saucepanFiltersBtn" class="glass-btn" title="Library filters"><i class="fa-solid fa-sliders"></i> <span>Features</span></button>
                 <div id="saucepanFiltersDropdown" class="dropdown-menu browse-features-dropdown hidden">
+                    <div class="dropdown-section-title">Content</div>
+                    <label class="filter-checkbox"><input id="saucepanFilterNsfw" type="checkbox"> <i class="fa-solid fa-fire"></i> Include NSFW</label>
+                    <label class="filter-checkbox"><input id="saucepanFilterOpenDefs" type="checkbox"> <i class="fa-solid fa-lock-open"></i> Open Definitions Only</label>
                     <div class="dropdown-section-title">Library</div>
                     <label class="filter-checkbox"><input id="saucepanFilterHideOwned" type="checkbox"> <i class="fa-solid fa-check"></i> Hide Owned Characters</label>
                     <label class="filter-checkbox"><input id="saucepanFilterHidePossible" type="checkbox"> <i class="fa-solid fa-circle-exclamation"></i> Hide Possible Matches</label>
                 </div>
             </div>
-            <button id="saucepanNsfwToggle" class="glass-btn nsfw-toggle" title="Toggle NSFW content"><i class="fa-solid fa-shield-halved"></i> <span>SFW Only</span></button>
-            <button id="saucepanOpenDefToggle" class="glass-btn active" title="Show only open definitions"><i class="fa-solid fa-lock-open"></i> <span>Open Defs</span></button>
             <button id="saucepanRefreshBtn" class="glass-btn icon-only" title="Refresh"><i class="fa-solid fa-rotate"></i></button>`;
     }
 
@@ -268,20 +188,9 @@ export class SaucepanBrowseView extends BrowseView {
             <div id="saucepanBrowseSection" class="browse-section saucepan-section">
                 <div class="browse-search-bar">
                     <div class="browse-search-input-wrapper"><i class="fa-solid fa-magnifying-glass"></i><input id="saucepanSearchInput" type="search" placeholder="Character name, UUID, or companion URL..." autocomplete="one-time-code"><button id="saucepanClearSearchBtn" class="browse-search-clear hidden" title="Clear"><i class="fa-solid fa-xmark"></i></button><button id="saucepanSearchBtn" class="browse-search-submit" title="Search"><i class="fa-solid fa-arrow-right"></i></button></div>
-                    <div class="browse-creator-search"><div class="browse-creator-search-wrapper"><i class="fa-solid fa-user"></i><input id="saucepanCreatorSearchInput" type="search" placeholder="@handle, handle, or profile URL..." autocomplete="one-time-code"><button id="saucepanCreatorSearchBtn" class="browse-search-submit" title="Browse creator"><i class="fa-solid fa-arrow-right"></i></button></div></div>
-                </div>
-                <div id="saucepanCreatorBanner" class="browse-author-banner hidden">
-                    <div class="browse-author-banner-content"><i class="fa-solid fa-user"></i><span>Browsing characters by <strong id="saucepanCreatorBannerName"></strong></span></div>
-                    <div class="browse-author-banner-actions"><button id="saucepanFollowCreatorBtn" class="glass-btn" title="Follow creator"><i class="fa-regular fa-heart"></i> <span>Follow</span></button><a id="saucepanCreatorExternalBtn" class="glass-btn icon-only" target="_blank" rel="noopener noreferrer" title="Open Saucepan profile"><i class="fa-solid fa-arrow-up-right-from-square"></i></a><button id="saucepanClearCreatorBtn" class="glass-btn icon-only" title="Clear creator"><i class="fa-solid fa-xmark"></i></button></div>
                 </div>
                 <div id="saucepanGrid" class="browse-grid"></div>
                 <div id="saucepanLoadMore" class="browse-load-more" style="display:none"><button id="saucepanLoadMoreBtn" class="glass-btn"><i class="fa-solid fa-plus"></i> Load More</button></div>
-            </div>
-            <div id="saucepanFollowingSection" class="browse-section saucepan-section hidden">
-                <div class="saucepan-timeline-header"><div><h3><i class="fa-solid fa-clock"></i> Following</h3><p>Characters from locally followed Saucepan creators</p></div><button id="saucepanFollowMgrToggle" class="follow-mgr-toggle-btn glass-btn"><i class="fa-solid fa-users-gear"></i> Manage</button></div>
-                ${this.renderFollowingManagerPanel()}
-                <div id="saucepanFollowingGrid" class="browse-grid"></div>
-                <div id="saucepanFollowingLoadMore" class="browse-load-more" style="display:none"><button id="saucepanFollowingLoadMoreBtn" class="glass-btn"><i class="fa-solid fa-plus"></i> Load More</button></div>
             </div>`;
     }
 
@@ -325,11 +234,7 @@ export class SaucepanBrowseView extends BrowseView {
     }
 
     applyDefaults(defaults = {}) {
-        if (defaults.view === 'following') this._mode = 'following';
-        if (defaults.sort) {
-            if (this._mode === 'following') this._followingSort = defaults.sort;
-            else this._sort = defaults.sort;
-        }
+        if (defaults.sort) this._sort = defaults.sort;
         this._hideOwned = defaults.hideOwned === true;
         this._hidePossible = defaults.hidePossible === true;
         this._syncControls();
@@ -339,7 +244,6 @@ export class SaucepanBrowseView extends BrowseView {
         if (options.domRecreated) {
             this._clearDelegates();
             this._characters = [];
-            this._followingCharacters = [];
             this._initialized = false;
         }
         super.activate(container, options);
@@ -348,9 +252,7 @@ export class SaucepanBrowseView extends BrowseView {
         this._openDefinitionsOnly = getSetting('saucepanOpenDefinitionOnly') !== false;
         this.buildLocalLibraryLookup();
         this._syncControls();
-        if (this._mode === 'following') {
-            this._switchMode('following', this._followingCharacters.length === 0);
-        } else if (this._characters.length === 0) {
+        if (this._characters.length === 0) {
             this._loadBrowse(false);
         } else {
             this._renderGrid(false);
@@ -380,59 +282,6 @@ export class SaucepanBrowseView extends BrowseView {
         document.getElementById('saucepanFiltersDropdown')?.classList.add('hidden');
     }
 
-    async getFollowedCreators() {
-        return this._readFollows();
-    }
-
-    async followCreator(query) {
-        const handle = parseCreatorHandle(query);
-        if (!handle) return null;
-        try {
-            const data = await fetchSaucepanCompanionsOfUser(handle);
-            const characters = data?.characters || [];
-            if (!characters.length) {
-                showToast(`Saucepan creator "${handle}" was not found or has no characters`, 'warning');
-                return null;
-            }
-            const hit = characters[0];
-            const creator = {
-                id: String(getCreatorId(hit) || handle).toLowerCase(),
-                handle: getCreatorName(hit) || handle,
-                name: getCreatorName(hit) || handle,
-                characterCount: characters.length,
-                followedAt: Date.now(),
-            };
-            const follows = this._readFollows();
-            if (follows.some(item => item.id === creator.id || item.handle.toLowerCase() === creator.handle.toLowerCase())) {
-                showToast(`Already following @${creator.handle}`, 'info');
-                return null;
-            }
-            follows.push(creator);
-            this._writeFollows(follows);
-            this._updateFollowButton();
-            showToast(`Following @${creator.handle}`, 'success');
-            return creator;
-        } catch (error) {
-            showToast(`Could not follow creator: ${error.message}`, 'error');
-            return null;
-        }
-    }
-
-    async unfollowCreator(id) {
-        const follows = this._readFollows();
-        const next = follows.filter(item => item.id !== String(id).toLowerCase());
-        if (next.length === follows.length) return false;
-        this._writeFollows(next);
-        this._updateFollowButton();
-        if (this._mode === 'following') await this._loadFollowing();
-        return true;
-    }
-
-    browseCreatorFromManager(creator) {
-        this._switchMode('browse');
-        this._browseCreator(creator.handle || creator.name);
-    }
-
     async openAggregatedHit(hit) {
         if (!hit) return;
         const id = getCharId(hit);
@@ -452,23 +301,6 @@ export class SaucepanBrowseView extends BrowseView {
         await this._openPreview(normalized);
     }
 
-    _readFollows() {
-        const raw = getSetting('saucepanFollowedCreators');
-        const list = Array.isArray(raw) ? raw : [];
-        return list.map(normalizedFollow).filter(Boolean);
-    }
-
-    _writeFollows(follows) {
-        setSetting('saucepanFollowedCreators', follows.map(item => ({
-            id: item.id,
-            handle: item.handle,
-            name: item.name,
-            avatar: item.avatar || '',
-            characterCount: item.characterCount,
-            followedAt: item.followedAt || Date.now(),
-        })));
-    }
-
     _listen(target, event, handler) {
         if (!target) return;
         target.addEventListener(event, handler);
@@ -482,15 +314,9 @@ export class SaucepanBrowseView extends BrowseView {
     _wireView() {
         const byId = id => document.getElementById(id);
         this._listen(document.getElementById('onlineView'), 'click', event => this._handleGridClick(event));
-        for (const button of document.querySelectorAll('.saucepan-view-btn')) {
-            this._listen(button, 'click', () => this._switchMode(button.dataset.saucepanView, true));
-        }
         const submitSearch = () => this._performCharacterSearch();
-        const submitCreator = () => this._browseCreator(byId('saucepanCreatorSearchInput')?.value);
         this._listen(byId('saucepanSearchBtn'), 'click', submitSearch);
-        this._listen(byId('saucepanCreatorSearchBtn'), 'click', submitCreator);
         this._listen(byId('saucepanSearchInput'), 'keydown', event => { if (event.key === 'Enter') submitSearch(); });
-        this._listen(byId('saucepanCreatorSearchInput'), 'keydown', event => { if (event.key === 'Enter') submitCreator(); });
         this._listen(byId('saucepanSearchInput'), 'input', event => byId('saucepanClearSearchBtn')?.classList.toggle('hidden', !event.target.value.trim()));
         this._listen(byId('saucepanClearSearchBtn'), 'click', () => {
             byId('saucepanSearchInput').value = '';
@@ -499,21 +325,17 @@ export class SaucepanBrowseView extends BrowseView {
             this._resetBrowse();
         });
         this._listen(byId('saucepanSortSelect'), 'change', event => { this._sort = event.target.value; this._resetBrowse(); });
-        this._listen(byId('saucepanFollowingSortSelect'), 'change', event => { this._followingSort = event.target.value; this._renderFollowing(false); });
         this._listen(byId('saucepanTagsBtn'), 'click', event => { event.stopPropagation(); this.closeDropdowns(); byId('saucepanTagsDropdown')?.classList.toggle('hidden'); this._renderTags(); });
         this._listen(byId('saucepanFiltersBtn'), 'click', event => { event.stopPropagation(); const dropdown = byId('saucepanFiltersDropdown'); const opening = dropdown?.classList.contains('hidden'); this.closeDropdowns(); if (opening) dropdown?.classList.remove('hidden'); });
         this._listen(byId('saucepanTagsSearchInput'), 'input', event => this._renderTags(event.target.value));
         this._listen(byId('saucepanTagsClearBtn'), 'click', () => { this._tagStates.clear(); this._renderTags(); this._updateFilterControls(); this._resetBrowse(); });
+        this._listen(byId('saucepanFilterNsfw'), 'change', event => { this._nsfw = event.target.checked; setSetting('saucepanNsfw', this._nsfw); this._updateFilterControls(); this._rerenderCurrent(); });
+        this._listen(byId('saucepanFilterOpenDefs'), 'change', event => { this._openDefinitionsOnly = event.target.checked; setSetting('saucepanOpenDefinitionOnly', this._openDefinitionsOnly); this._updateFilterControls(); this._resetBrowse(); });
         this._listen(byId('saucepanFilterHideOwned'), 'change', event => { this._hideOwned = event.target.checked; this._rerenderCurrent(); });
         this._listen(byId('saucepanFilterHidePossible'), 'change', event => { this._hidePossible = event.target.checked; this._rerenderCurrent(); });
-        this._listen(byId('saucepanNsfwToggle'), 'click', () => { this._nsfw = !this._nsfw; setSetting('saucepanNsfw', this._nsfw); this._updateFilterControls(); this._rerenderCurrent(); });
-        this._listen(byId('saucepanOpenDefToggle'), 'click', () => { this._openDefinitionsOnly = !this._openDefinitionsOnly; setSetting('saucepanOpenDefinitionOnly', this._openDefinitionsOnly); this._updateFilterControls(); this._resetBrowse(); });
-        this._listen(byId('saucepanRefreshBtn'), 'click', () => this._mode === 'following' ? this._loadFollowing() : this._resetBrowse());
+        this._listen(byId('saucepanRefreshBtn'), 'click', () => this._resetBrowse());
         this._listen(byId('saucepanLoadMoreBtn'), 'click', () => this.loadMore());
-        this._listen(byId('saucepanFollowingLoadMoreBtn'), 'click', () => this.loadMore());
-        this._listen(byId('saucepanClearCreatorBtn'), 'click', () => { this._creator = null; this._creatorFullList = []; this._search = ''; this._syncCreatorBanner(); this._resetBrowse(); });
-        this._listen(byId('saucepanFollowCreatorBtn'), 'click', () => this._toggleCurrentCreatorFollow());
-        for (const select of [byId('saucepanSortSelect'), byId('saucepanFollowingSortSelect')]) CoreAPI.initCustomSelect?.(select);
+        CoreAPI.initCustomSelect?.(byId('saucepanSortSelect'));
     }
 
     _wireModal() {
@@ -522,68 +344,30 @@ export class SaucepanBrowseView extends BrowseView {
         const modal = document.getElementById('saucepanCharModal');
         document.getElementById('saucepanCharClose')?.addEventListener('click', () => this.closePreview());
         document.getElementById('saucepanImportBtn')?.addEventListener('click', () => this._importSelected());
-        document.getElementById('saucepanCharCreator')?.addEventListener('click', event => {
-            event.preventDefault();
-            const handle = getCreatorName(this._selectedHit);
-            this.closePreview();
-            this._switchMode('browse');
-            this._browseCreator(handle);
-        });
         modal?.addEventListener('click', event => { if (event.target === modal) this.closePreview(); });
         window.registerOverlay?.({ id: 'saucepanCharModal', tier: 7, close: () => this.closePreview() });
     }
 
     _syncControls() {
         const browseSort = document.getElementById('saucepanSortSelect');
-        const followingSort = document.getElementById('saucepanFollowingSortSelect');
         if (browseSort) browseSort.value = this._sort;
-        if (followingSort) followingSort.value = this._followingSort;
-        document.getElementById('saucepanFilterHideOwned').checked = this._hideOwned;
-        document.getElementById('saucepanFilterHidePossible').checked = this._hidePossible;
+        const hideOwned = document.getElementById('saucepanFilterHideOwned');
+        const hidePossible = document.getElementById('saucepanFilterHidePossible');
+        if (hideOwned) hideOwned.checked = this._hideOwned;
+        if (hidePossible) hidePossible.checked = this._hidePossible;
         this._updateFilterControls();
-        this._syncModeDom();
-    }
-
-    _syncModeDom() {
-        const following = this._mode === 'following';
-        document.querySelectorAll('.saucepan-view-btn').forEach(button => button.classList.toggle('active', button.dataset.saucepanView === this._mode));
-        document.getElementById('saucepanBrowseSection')?.classList.toggle('hidden', following);
-        document.getElementById('saucepanFollowingSection')?.classList.toggle('hidden', !following);
-        const browseSort = document.getElementById('saucepanSortSelect');
-        const followingSort = document.getElementById('saucepanFollowingSortSelect');
-        (browseSort?._customSelect?.container || browseSort)?.classList.toggle('hidden', following);
-        (followingSort?._customSelect?.container || followingSort)?.classList.toggle('hidden', !following);
-        document.getElementById('saucepanTagsBtn')?.closest('.browse-tags-dropdown-container')?.classList.toggle('hidden', following);
-        document.getElementById('saucepanOpenDefToggle')?.classList.toggle('hidden', following);
-    }
-
-    async _switchMode(mode, load = false) {
-        if (!['browse', 'following'].includes(mode)) return;
-        this._mode = mode;
-        this.closeDropdowns();
-        this._syncModeDom();
-        if (load) {
-            if (mode === 'following') await this._loadFollowing();
-            else if (!this._characters.length) await this._loadBrowse(false);
-        }
     }
 
     _updateFilterControls() {
-        const nsfw = document.getElementById('saucepanNsfwToggle');
-        if (nsfw) {
-            nsfw.classList.toggle('active', this._nsfw);
-            nsfw.innerHTML = this._nsfw ? '<i class="fa-solid fa-fire"></i> <span>NSFW On</span>' : '<i class="fa-solid fa-shield-halved"></i> <span>SFW Only</span>';
-        }
-        const openDef = document.getElementById('saucepanOpenDefToggle');
-        if (openDef) {
-            openDef.classList.toggle('active', this._openDefinitionsOnly);
-            openDef.innerHTML = this._openDefinitionsOnly ? '<i class="fa-solid fa-lock-open"></i> <span>Open Defs</span>' : '<i class="fa-solid fa-lock"></i> <span>All Defs</span>';
-        }
+        const nsfw = document.getElementById('saucepanFilterNsfw');
+        const openDef = document.getElementById('saucepanFilterOpenDefs');
+        if (nsfw) nsfw.checked = this._nsfw;
+        if (openDef) openDef.checked = this._openDefinitionsOnly;
         const count = [...this._tagStates.values()].filter(Boolean).length;
         document.getElementById('saucepanTagsBtn')?.classList.toggle('has-filters', count > 0);
         const label = document.getElementById('saucepanTagsBtnLabel');
         if (label) label.textContent = count ? `Tags (${count})` : 'Tags';
-        document.getElementById('saucepanFiltersBtn')?.classList.toggle('has-filters', this._hideOwned || this._hidePossible);
+        document.getElementById('saucepanFiltersBtn')?.classList.toggle('has-filters', this._nsfw || !this._openDefinitionsOnly || this._hideOwned || this._hidePossible);
     }
 
     _renderTags(filter = '') {
@@ -615,27 +399,8 @@ export class SaucepanBrowseView extends BrowseView {
             await this.openAggregatedHit({ id, character_id: id, name: 'Saucepan Companion', _source: 'saucepan' });
             return;
         }
-        this._creator = null;
-        this._creatorFullList = [];
         this._search = query;
-        this._syncCreatorBanner();
         await this._resetBrowse();
-    }
-
-    async _browseCreator(query) {
-        const handle = parseCreatorHandle(query);
-        if (!handle) return;
-        this._switchMode('browse');
-        this._creator = { handle, name: handle, id: handle.toLowerCase() };
-        this._cdRef = { handle, name: handle };
-        this._search = '';
-        this._page = 1;
-        this._syncCreatorBanner();
-        await this._loadBrowse(false);
-    }
-
-    async browseCreator(query) {
-        return this._browseCreator(query);
     }
 
     async _resetBrowse() {
@@ -653,27 +418,12 @@ export class SaucepanBrowseView extends BrowseView {
         if (!append && grid) renderSkeletonGrid(grid);
         this._setLoadButton('saucepanLoadMoreBtn', true);
         try {
-            let list;
-            if (this._creator) {
-                if (!append || !this._creatorFullList.length) {
-                    const data = await fetchSaucepanCompanionsOfUser(this._creator.handle);
-                    this._creatorFullList = sortCreatorCharacters(data?.characters || [], this._sort === 'saucepan_popular' ? 'popular' : 'newest');
-                    const first = this._creatorFullList[0];
-                    if (first) {
-                        this._creator = { id: String(getCreatorId(first) || this._creator.handle).toLowerCase(), handle: getCreatorName(first) || this._creator.handle, name: getCreatorName(first) || this._creator.name };
-                        this._cdRef = { handle: this._creator.handle, name: this._creator.name };
-                    }
-                }
-                list = this._creatorFullList.slice(append ? this._characters.length : 0, (append ? this._characters.length : 0) + PAGE_SIZE);
-                this._hasMore = (append ? this._characters.length : 0) + list.length < this._creatorFullList.length;
-            } else {
-                const include = [], exclude = [...(getProviderExcludeTags('saucepan') || [])];
-                for (const [tag, state] of this._tagStates) (state === 'include' ? include : exclude).push(tag);
-                const data = await searchSaucepan({ search: this._search, page: this._page, limit: PAGE_SIZE, sort: this._sort, openDefinitionOnly: this._openDefinitionsOnly, tags: include, excludedTags: exclude });
-                list = data?.characters || [];
-                this._totalPages = data?.totalPages || 0;
-                this._hasMore = this._page < this._totalPages;
-            }
+            const include = [], exclude = [...(getProviderExcludeTags('saucepan') || [])];
+            for (const [tag, state] of this._tagStates) (state === 'include' ? include : exclude).push(tag);
+            const data = await searchSaucepan({ search: this._search, page: this._page, limit: PAGE_SIZE, sort: this._sort, openDefinitionOnly: this._openDefinitionsOnly, tags: include, excludedTags: exclude });
+            const list = data?.characters || [];
+            this._totalPages = data?.totalPages || 0;
+            this._hasMore = this._page < this._totalPages;
             if (token !== this._loadToken || !this._active) return;
             for (const hit of list) for (const tag of tagsOf(hit)) this._discoveredTags.add(tag);
             if (append) {
@@ -682,7 +432,6 @@ export class SaucepanBrowseView extends BrowseView {
             } else {
                 this._characters = list;
             }
-            this._syncCreatorBanner();
             this._renderGrid(append);
         } catch (error) {
             if (token !== this._loadToken) return;
@@ -707,10 +456,6 @@ export class SaucepanBrowseView extends BrowseView {
         return list;
     }
 
-    _filteredFollowing() {
-        return sortCreatorCharacters(this._filtered(this._followingCharacters), this._followingSort);
-    }
-
     _renderGrid(append) {
         const grid = document.getElementById('saucepanGrid');
         if (!grid) return;
@@ -721,19 +466,6 @@ export class SaucepanBrowseView extends BrowseView {
         if (!grid.querySelector('.browse-card')) grid.innerHTML = '<div class="saucepan-empty"><i class="fa-solid fa-bowl-food"></i><p>No Saucepan characters match these filters.</p></div>';
         this.observeImages(grid);
         this.updateLoadMoreVisibility('saucepanLoadMore', this._hasMore, this._characters.length > 0);
-    }
-
-    _renderFollowing(append) {
-        const grid = document.getElementById('saucepanFollowingGrid');
-        if (!grid) return;
-        const filtered = this._filteredFollowing();
-        const visible = filtered.slice(0, this._followingVisible);
-        const current = append ? grid.querySelectorAll('.browse-card').length : 0;
-        if (!append) grid.innerHTML = '';
-        grid.insertAdjacentHTML('beforeend', visible.slice(current).map(hit => this._cardHtml(hit)).join(''));
-        if (!visible.length) grid.innerHTML = '<div class="saucepan-empty"><i class="fa-solid fa-user-plus"></i><p>Follow Saucepan creators to build this timeline.</p></div>';
-        this.observeImages(grid);
-        this.updateLoadMoreVisibility('saucepanFollowingLoadMore', this._followingVisible < filtered.length, visible.length > 0);
     }
 
     _cardHtml(hit) {
@@ -747,50 +479,13 @@ export class SaucepanBrowseView extends BrowseView {
         const badge = owned ? '<span class="browse-feature-badge in-library" title="In Your Library"><i class="fa-solid fa-check"></i></span>' : tier?.show ? `<span class="browse-feature-badge possible-library pl-${tier.tier}" title="${tier.tooltip}"><i class="fa-solid fa-check"></i></span>` : '';
         return `<div class="${classes}" data-saucepan-id="${escapeHtml(id)}">
             <div class="browse-card-image"><img data-src="${escapeHtml(avatar)}" src="${IMG_PLACEHOLDER}" alt="${escapeHtml(name)}" decoding="async" fetchpriority="low" onerror="this.dataset.failed='1';this.src='/img/ai4.png'">${isNsfw(hit) ? '<span class="browse-nsfw-badge">NSFW</span>' : ''}${badge ? `<div class="browse-feature-badges">${badge}</div>` : ''}</div>
-            <div class="browse-card-body"><div class="browse-card-name">${escapeHtml(name)}</div>${creator ? `<button class="browse-card-creator-link saucepan-creator-link" data-creator-id="${escapeHtml(String(getCreatorId(hit)))}" data-author="${escapeHtml(creator)}">${escapeHtml(creator)}</button>` : ''}<div class="browse-card-tags">${tagsOf(hit).slice(0, 3).map(tag => `<span class="browse-card-tag">${escapeHtml(tag)}</span>`).join('')}</div></div>
+            <div class="browse-card-body"><div class="browse-card-name">${escapeHtml(name)}</div>${creator ? `<a class="browse-card-creator-link" href="https://saucepan.ai/u/${encodeURIComponent(creator)}" target="_blank" rel="noopener noreferrer" title="Open @${escapeHtml(creator)} on Saucepan">${escapeHtml(creator)}</a>` : ''}<div class="browse-card-tags">${tagsOf(hit).slice(0, 3).map(tag => `<span class="browse-card-tag">${escapeHtml(tag)}</span>`).join('')}</div></div>
             <div class="browse-card-footer"><span class="browse-card-stat" title="Chats"><i class="fa-solid fa-comments"></i> ${formatNumber(getChatCount(hit))}</span><span class="browse-card-stat" title="Messages"><i class="fa-solid fa-envelope"></i> ${formatNumber(getMsgCount(hit))}</span>${getCreatedDate(hit) ? `<span class="browse-card-date"><i class="fa-solid fa-clock"></i> ${escapeHtml(getCreatedDate(hit))}</span>` : ''}</div>
         </div>`;
     }
 
-    async _loadFollowing() {
-        const token = ++this._loadToken;
-        this._loading = true;
-        this._followingVisible = FOLLOWING_PAGE_SIZE;
-        const grid = document.getElementById('saucepanFollowingGrid');
-        if (grid) renderSkeletonGrid(grid);
-        try {
-            const follows = this._readFollows();
-            const results = await Promise.allSettled(follows.map(item => fetchSaucepanCompanionsOfUser(item.handle)));
-            if (token !== this._loadToken || !this._active) return;
-            const seen = new Set();
-            this._followingCharacters = [];
-            results.forEach((result, index) => {
-                if (result.status !== 'fulfilled') return;
-                const follow = follows[index];
-                const list = result.value?.characters || [];
-                follow.characterCount = list.length;
-                for (const hit of list) {
-                    const id = String(getCharId(hit));
-                    if (!id || seen.has(id)) continue;
-                    seen.add(id);
-                    this._followingCharacters.push(hit);
-                }
-            });
-            if (follows.length) this._writeFollows(follows);
-            this._renderFollowing(false);
-        } finally {
-            if (token === this._loadToken) this._loading = false;
-        }
-    }
-
     _handleGridClick(event) {
-        const creator = event.target.closest('.saucepan-creator-link');
-        if (creator) {
-            event.preventDefault();
-            event.stopPropagation();
-            this._browseCreator(creator.dataset.author);
-            return;
-        }
+        if (event.target.closest('.browse-card-creator-link')) return;
         const card = event.target.closest('.browse-card[data-saucepan-id]');
         if (!card) return;
         const hit = this._findHit(card.dataset.saucepanId);
@@ -798,31 +493,7 @@ export class SaucepanBrowseView extends BrowseView {
     }
 
     _findHit(id) {
-        return [...this._characters, ...this._followingCharacters].find(hit => String(getCharId(hit)) === String(id));
-    }
-
-    _syncCreatorBanner() {
-        const banner = document.getElementById('saucepanCreatorBanner');
-        banner?.classList.toggle('hidden', !this._creator);
-        const name = document.getElementById('saucepanCreatorBannerName');
-        if (name) name.textContent = this._creator?.name || '';
-        const external = document.getElementById('saucepanCreatorExternalBtn');
-        if (external) external.href = this._creator ? `https://saucepan.ai/@${encodeURIComponent(this._creator.handle)}` : '#';
-        this._updateFollowButton();
-    }
-
-    _updateFollowButton() {
-        const button = document.getElementById('saucepanFollowCreatorBtn');
-        if (!button || !this._creator) return;
-        const followed = this._readFollows().some(item => item.id === this._creator.id || item.handle.toLowerCase() === this._creator.handle.toLowerCase());
-        button.classList.toggle('active', followed);
-        button.innerHTML = followed ? '<i class="fa-solid fa-heart"></i> <span>Following</span>' : '<i class="fa-regular fa-heart"></i> <span>Follow</span>';
-    }
-
-    async _toggleCurrentCreatorFollow() {
-        if (!this._creator) return;
-        const follow = this._readFollows().find(item => item.id === this._creator.id || item.handle.toLowerCase() === this._creator.handle.toLowerCase());
-        if (follow) await this.unfollowCreator(follow.id); else await this.followCreator(this._creator.handle);
+        return this._characters.find(hit => String(getCharId(hit)) === String(id));
     }
 
     async _openPreview(hit) {
@@ -839,7 +510,11 @@ export class SaucepanBrowseView extends BrowseView {
         const avatar = resolveSaucepanImageUrl(hit.avatar) || hit.avatar || '/img/ai4.png';
         document.getElementById('saucepanCharAvatar').src = avatar;
         document.getElementById('saucepanCharName').textContent = name;
-        document.getElementById('saucepanCharCreator').textContent = creator;
+        const creatorLink = document.getElementById('saucepanCharCreator');
+        creatorLink.textContent = creator;
+        creatorLink.href = creator !== 'Unknown' ? `https://saucepan.ai/u/${encodeURIComponent(creator)}` : '#';
+        creatorLink.target = creator !== 'Unknown' ? '_blank' : '';
+        creatorLink.rel = creator !== 'Unknown' ? 'noopener noreferrer' : '';
         document.getElementById('saucepanOpenInBrowserBtn').href = `https://saucepan.ai/companion/${encodeURIComponent(id)}`;
         document.getElementById('saucepanCharChats').textContent = formatNumber(getChatCount(hit));
         document.getElementById('saucepanCharMessages').textContent = formatNumber(getMsgCount(hit));
@@ -887,7 +562,9 @@ export class SaucepanBrowseView extends BrowseView {
         const creator = cardData.creator || companion.author_handle || getCreatorName(listing) || 'Unknown';
         this._selectedHit = { ...listing, name, creator_name: creator, character_id: getCharId(listing) };
         document.getElementById('saucepanCharName').textContent = name;
-        document.getElementById('saucepanCharCreator').textContent = creator;
+        const creatorLink = document.getElementById('saucepanCharCreator');
+        creatorLink.textContent = creator;
+        creatorLink.href = creator !== 'Unknown' ? `https://saucepan.ai/u/${encodeURIComponent(creator)}` : '#';
         document.getElementById('saucepanCharDefinitionLoading').style.display = 'none';
         const lockStat = document.getElementById('saucepanCharLockStat');
         if (lockStat) lockStat.style.display = resolution?.locked ? '' : 'none';
@@ -1036,7 +713,7 @@ export class SaucepanBrowseView extends BrowseView {
     }
 
     _rerenderCurrent() {
-        if (this._mode === 'following') this._renderFollowing(false); else this._renderGrid(false);
+        this._renderGrid(false);
         this._updateFilterControls();
     }
 

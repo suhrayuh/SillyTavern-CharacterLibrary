@@ -155,30 +155,6 @@ function normalizeSaucepanHit(hit) {
 }
 
 /**
- * Fetch all companions authored by a Saucepan handle.
- * The endpoint returns the full list in one response (no real pagination
- * support: limit/offset are ignored server-side, total_count == count).
- * @param {string} handle - Saucepan author handle
- * @returns {Promise<{characters: Object[], totalCount: number}>}
- */
-export async function fetchSaucepanCompanionsOfUser(handle) {
-    if (!handle) return { characters: [], totalCount: 0 };
-    let response;
-    try {
-        response = await saucepanFetch('GET', `/api/v1/companions-of-user?handle=${encodeURIComponent(handle)}`);
-    } catch (err) {
-        throw new Error(`Saucepan creator fetch failed: ${err.message}`);
-    }
-    if (!response.ok) throw new Error(`Saucepan HTTP ${response.status}`);
-    const data = await response.json();
-    const companions = data?.companions || [];
-    return {
-        characters: companions.map(normalizeSaucepanHit),
-        totalCount: data?.total_count ?? companions.length,
-    };
-}
-
-/**
  * Lightweight lorebook list fetch for the browse modal preview.
  * Fetches just the lorebook names/ids attached to a companion — no chapter
  * content, no fragment reassembly. Returns an array of DataCat-compatible

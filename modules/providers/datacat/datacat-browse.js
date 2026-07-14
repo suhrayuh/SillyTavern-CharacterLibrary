@@ -1174,13 +1174,13 @@ function performDatacatCreatorSearch() {
 
     const lowerQuery = query.toLowerCase();
 
-    // Helper: route to saucepan creator browse if the matched hit is a
-    // saucepan card (their author IDs are not in DataCat's creator DB).
+    // Saucepan does not expose a supported creator-companion list endpoint.
+    // Open its public profile instead of routing into a broken creator view.
     const routeFromHit = (hit) => {
         const creatorId = getCreatorId(hit);
         if (!creatorId) return false;
         if (getSourceKind(hit) === 'saucepan') {
-            delegateSaucepanCreator(hit);
+            openSaucepanCreatorProfile(hit);
         } else {
             browseCreator(creatorId);
         }
@@ -1939,7 +1939,7 @@ function _handleFollowingCardClick(e) {
             const charId = card?.dataset?.datacatId;
             const hit = charId ? datacatFollowingCharacters.find(c => String(getCharId(c)) === charId) : null;
             if (hit && getSourceKind(hit) === 'saucepan') {
-                delegateSaucepanCreator(hit);
+                openSaucepanCreatorProfile(hit);
             } else {
                 browseCreator(creatorId);
             }
@@ -2037,15 +2037,13 @@ async function delegateSaucepanHit(hit) {
     return true;
 }
 
-async function delegateSaucepanCreator(hit) {
+function openSaucepanCreatorProfile(hit) {
     const handle = getCreatorName(hit);
-    const provider = CoreAPI.getProvider('saucepan');
-    if (!handle || !provider?.browseView?.browseCreator) {
+    if (!handle) {
         showToast('Saucepan creator is not available', 'warning');
         return false;
     }
-    await CoreAPI.activateOnlineProvider?.('saucepan');
-    await provider.browseView.browseCreator(handle);
+    window.open(`https://saucepan.ai/u/${encodeURIComponent(handle)}`, '_blank', 'noopener,noreferrer');
     return true;
 }
 
@@ -2834,7 +2832,7 @@ function initDatacatView() {
                     const charId = card?.dataset?.datacatId;
                     const hit = charId ? datacatCharacters.find(c => String(getCharId(c)) === charId) : null;
                     if (hit && getSourceKind(hit) === 'saucepan') {
-                        delegateSaucepanCreator(hit);
+                        openSaucepanCreatorProfile(hit);
                     } else {
                         browseCreator(creatorId);
                     }
