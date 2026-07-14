@@ -441,16 +441,16 @@ Providers with Following support include a **Followed Creators Manager** panel f
 
 ### Provider Feature Matrix
 
-| Feature | ChubAI | JanitorAI | CharacterTavern | Pygmalion | Wyvern | DataCat | Botbooru |
-|---------|--------|-----------|-----------------|-----------|--------|----------|----------|
-| Browse & Search | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Card Updates | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Character Linking | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Gallery Downloads | ✅ | -- | -- | ✅ | ✅ | -- | ✅ |
-| Remote Version History | ✅ | -- | -- | -- | -- | -- | -- |
-| Following / Timeline | ✅ | -- | -- | ✅ | ✅ | ✅ | ✅ |
-| Favorites | ✅ | -- | -- | -- | -- | -- | ✅ |
-| Auth Required | Optional | None | Optional | Optional | Optional | None | Optional (NSFW needs login) |
+| Feature | ChubAI | JanitorAI | CharacterTavern | Pygmalion | Wyvern | Saucepan (fork-specific!) | DataCat | Botbooru |
+|---------|--------|-----------|-----------------|-----------|--------|----------|----------|----------|
+| Browse & Search | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Card Updates | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Character Linking | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Gallery Downloads | ✅ | -- | -- | ✅ | ✅ | ✅ | -- | ✅ |
+| Remote Version History | ✅ | -- | -- | -- | -- | -- | -- | -- |
+| Following / Timeline | ✅ | -- | -- | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Favorites | ✅ | -- | -- | -- | -- | -- | -- | ✅ |
+| Auth Required | Optional | None | Optional | Optional | Optional | Optional | None | Optional (NSFW needs login) |
 
 <details>
 <summary><h3>ChubAI</h3></summary>
@@ -610,6 +610,34 @@ Extraction is handled entirely by DataCat's servers. The `appearOnPublicFeed` op
 </details>
 
 <details>
+<summary><h3>Saucepan (fork-specific)</h3></summary>
+
+**Auth:** Optional handle/password login or manual Bearer token. Requires the [cl-helper plugin](#cl-helper-plugin-not-detected).
+
+> **This provider is enabled by default.** Anonymous browsing works without a login.
+
+Saucepan is a first-class character provider. It offers native, token-backed extraction for open-definition companions, including their lorebooks and portrait galleries, plus DataCat metadata/download fallback when a definition is locked or unavailable.
+
+- Browse and search by New, Trending, or Popular
+- Search by character name, Saucepan UUID, or a full `saucepan.ai/companion/<id>` URL
+- **Creator search**: paste a Saucepan creator handle (`@handle`), bare handle, or a `saucepan.ai/@handle` profile URL to browse all their companions
+- **Following tab** tracks the Saucepan creators you follow locally in Character Library
+- **Tri-state tags**: cycle each tag Neutral → Include → Exclude
+- Filter by **SFW/NSFW**, **Open Definitions only** or **All Definitions**, hide owned, hide possible matches
+- **In-app character preview** with creator notes, description, scenario, examples, first message, alternate greetings, linked lorebooks, and Saucepan portrait gallery
+- Native Saucepan extraction when a valid token is set; DataCat fallback for locked, missing, or failed definitions
+- Character linking and card updates
+- Gallery downloads and linked lorebook extraction
+- One-click import to your local library with duplicate detection
+
+#### Login
+1. Ensure the [cl-helper plugin](#cl-helper-plugin-not-detected) is installed and detected
+2. In Settings → Online → Saucepan, enter your Saucepan handle and password, or paste a Bearer token directly
+3. Use **Validate** to test the stored token against Saucepan's session API
+
+</details>
+
+<details>
 <summary><h3>Botbooru</h3></summary>
 
 **Auth:** Optional username/password login. The login handshake goes through the [cl-helper plugin](#cl-helper-plugin-not-detected); without the plugin you can paste an API token manually instead. Anonymous browsing is **SFW-only**: the server filters NSFW regardless of client settings.
@@ -675,6 +703,7 @@ Type these prefixes in the search bar for targeted filtering:
 | `pygmalion:` | `pygmalion:yes` or `pygmalion:no` | Pygmalion link specifically |
 | `wyvern:` | `wyvern:yes` or `wyvern:no` | Wyvern link specifically |
 | `datacat:` | `datacat:yes` or `datacat:no` | DataCat link specifically (also `dc:`) |
+| `saucepan:` | `saucepan:yes` or `saucepan:no` | Saucepan link specifically (also `sp:`) |
 | `botbooru:` | `botbooru:yes` or `botbooru:no` | Botbooru link specifically (also `bb:`) |
 | `version:` | `version:1.0` | Match character version string |
 | `gallery:` | `gallery:aB3x` or `gallery:none` | Match gallery ID (or `none` for unassigned) |
@@ -776,7 +805,7 @@ Licensed under the [GNU Affero General Public License v3](LICENSE).
 
 ## Fork-Specific Changes
 
-These changes were made on top of upstream Character Library v6.5.0.
+These changes were made on top of upstream Character Library v6.5.0 onwards.
 
 ### Always-Edit Setting
 
@@ -808,24 +837,30 @@ Integration with [SillyTavern-AlternateDescriptions](https://github.com/nbrown72
 - Data is read/written directly via `writeCardFields` and `applyCardFieldUpdates`
 - Lock integration: Alt. buttons are hidden when editing is locked
 
-### Saucepan Native Extraction
+### First-Class Saucepan Provider
 
-Native Saucepan character extraction integrated into the DataCat browse provider, bypassing DataCat's server-side extraction service for open-definition Saucepan characters.
+Saucepan is promoted to a standalone first-class provider alongside ChubAI, Wyvern, and DataCat in the provider dropdown. Previously it was surfaced only as a sort mode inside the experimental DataCat provider.
 
-- **Settings panel** under DataCat (Settings → Online → DataCat): login with Saucepan handle + password, or paste a Bearer token directly
-- Token validation tests the session against Saucepan's API and shows live status (Logged in / Not logged in)
-- **Source kind detection**: Saucepan characters are identified via `primary_content_source_kind === 'saucepan'` and handled through Saucepan-specific data paths
-- **Native import flow**: Saucepan characters with open definitions extract client-side via `fetchSaucepanCompanion()` and `submitSaucepanExtraction()` instead of relying on DataCat's queue
-- **Token persistence**: stored in Character Library settings and pushed to the cl-helper plugin for server-side token management
-- **Saucepan image CDN**: images resolve through Saucepan's CDN with `resolveSaucepanImageUrl()` for thumbnails and full-size downloads
-- **Proxy API**: Saucepan API requests are proxied through cl-helper's `/saucepan-proxy/` endpoint for CORS-free access
+- **Dedicated provider** with its own [Browse → Following → Creator Drilldown → Preview → Import] flow
+- **Unique DOM IDs** (`saucepan*`) independent of DataCat's overlay/model/modular state
+- **Canonical ownership** uses `extensions.saucepan = { id, creatorId, creatorName, pageName, linkedAt }`
+- **Legacy compatibility**: cards with `extensions.datacat.sourceKind === 'saucepan'` are immediately recognized and route through Saucepan without a mass-rewrite
+- **Lazy migration**: legacy metadata is removed only on update, reimport, or relink; all new imports emit canonical metadata
+- **Native-first card resolver**: native Saucepan extraction with token → DataCat download fallback → DataCat metadata fallback, exposed through `resolveSaucepanCard()` in `modules/providers/saucepan/saucepan-card-service.js`
+- **Dedicated settings**: Saucepan account controls, following, and defaults live in their own settings section (`#settingsSaucepanSection`); follows migrate idempotently from DataCat at startup
+- **DataCat integration**: DataCat still displays incidental Saucepan-origin aggregate rows with the `S` badge and **Hide Saucepan** filter, but all clicks, imports, and ownership delegate to the Saucepan provider
+- **Creator batch adapter**: downloads through `CoreAPI.getProvider('saucepan')`, not DataCat
+- **Provider logo**: official Saucepan SVG vendored at `modules/providers/saucepan/assets/saucepan-logo.svg`
+- **Lorebooks**: Characters with public lorebooks are imported to the library with their lorebooks automatically embedded and linked
 
-#### Settings Controls
-- **Login**: handle + password fields with login button (saves a session token)
-- **Save Token**: paste an existing Bearer token directly
-- **Validate**: test the stored token against Saucepan's session API
-- **Clear Token**: removes the stored token and logs out
-- **Status badge**: shows "Logged in" / "Not logged in" with active/inactive styling, updated on login, save, validate, and clear
+#### Removed from DataCat
+- Saucepan sort optgroup (New/Trending/Popular)
+- Standalone Saucepan text search and creator-handle routing
+- Saucepan open-definition toggle
+- Saucepan tri-state tag system
+- Native Saucepan extraction in DataCat's preview
+- Saucepan creator following and browsing
+- Saucepan import ownership under DataCat
 
 ### cl-helper Additions
 

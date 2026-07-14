@@ -6,7 +6,8 @@ import { CHUB_API_BASE, getChubHeaders, extractNodes } from './chub/chub-api.js'
 import { BOTBOORU_BASE, fetchBotbooruUser } from './botbooru/botbooru-api.js';
 import { fetchCharactersByOwner, getCharacterPageUrl } from './pygmalion/pygmalion-api.js';
 import { WYVERN_API_BASE, WYVERN_SITE_BASE, getWyvernHeaders } from './wyvern/wyvern-api.js';
-import { fetchDatacatCreatorCharacters, fetchSaucepanCompanionsOfUser, fetchDatacatCharacter, submitExtraction, fetchExtractionStatus } from './datacat/datacat-api.js';
+import { fetchDatacatCreatorCharacters, fetchDatacatCharacter, submitExtraction, fetchExtractionStatus } from './datacat/datacat-api.js';
+import { fetchSaucepanCompanionsOfUser } from './saucepan/saucepan-api.js';
 import { getSearchToken, JANNY_SEARCH_URL, JANNY_SITE_BASE } from './janny/janny-api.js';
 import { searchCards, isCtSessionActive } from './chartavern/chartavern-api.js';
 
@@ -354,6 +355,50 @@ const CD_ADAPTERS = {
             return { ok: true, avatarFileName: result.fileName, summaryArgs };
         },
     },
+    saucepan: {
+        async fetchAll(view) {
+            const handle = view._cdRef?.handle;
+            if (!handle) return [];
+            const data = await fetchSaucepanCompanionsOfUser(handle);
+            const seen = new Set();
+            const results = [];
+            for (const hit of (data?.characters || [])) {
+                const id = cdCharId(hit);
+                if (!id || seen.has(String(id))) continue;
+                seen.add(String(id));
+                results.push({
+                    key: String(id),
+                    name: hit.name || '',
+                    creator: hit.creator_name || hit.creatorName || handle,
+                    raw: hit,
+                });
+            }
+            return results;
+        },
+        async importOne(_view, card) {
+            const provider = CoreAPI.getProvider('saucepan');
+            if (!provider?.importCharacter) return { ok: false, error: 'Saucepan provider not available' };
+            const hit = card.raw;
+            const charId = cdCharId(hit);
+            const result = await provider.importCharacter(charId, hit, {});
+            if (!result.success) return { ok: false, error: result.error || 'Import failed' };
+            const summaryArgs = {
+                galleryCharacters: result.hasGallery ? [{
+                    name: result.characterName,
+                    provider,
+                    linkInfo: { providerId: 'saucepan', id: result.providerCharId || charId, fullPath: result.fullPath || charId },
+                    url: `https://saucepan.ai/companion/${result.providerCharId || charId}`,
+                    avatar: result.fileName,
+                    galleryId: result.galleryId,
+                    cardData: result.cardData,
+                }] : [],
+                mediaCharacters: cdHasMedia(result)
+                    ? [cdMediaEntry(result, { characterName: result.characterName, fileName: result.fileName })]
+                    : [],
+            };
+            return { ok: true, avatarFileName: result.fileName, summaryArgs };
+        },
+    },
     datacat: {
         async fetchAll(view) {
             const ref = view._cdRef;
@@ -369,23 +414,18 @@ const CD_ADAPTERS = {
                 seen.add(key);
                 results.push({ key, name: hit.name || '', creator: hit.creator_name || hit.creatorName || ref.name || '', raw: hit });
             };
-            if (ref.source === 'saucepan') {
-                const data = await fetchSaucepanCompanionsOfUser(ref.handle);
-                for (const hit of (data?.characters || [])) push(hit);
-            } else {
-                const PAGE = 80;
-                for (let offset = 0; ; offset += PAGE) {
-                    const data = await fetchDatacatCreatorCharacters(ref.creatorId, { limit: PAGE, offset, sortBy: 'chat_count' });
-                    if (!data) {
-                        if (offset === 0) throw new Error('DataCat creator fetch failed');
-                        break;
-                    }
-                    const list = data?.list || [];
-                    const before = results.length;
-                    for (const hit of list) push(hit);
-                    const total = data?.total || 0;
-                    if (results.length === before || list.length < PAGE || (total > 0 && results.length >= total)) break;
+            const PAGE = 80;
+            for (let offset = 0; ; offset += PAGE) {
+                const data = await fetchDatacatCreatorCharacters(ref.creatorId, { limit: PAGE, offset, sortBy: 'chat_count' });
+                if (!data) {
+                    if (offset === 0) throw new Error('DataCat creator fetch failed');
+                    break;
                 }
+                const list = data?.list || [];
+                const before = results.length;
+                for (const hit of list) push(hit);
+                const total = data?.total || 0;
+                if (results.length === before || list.length < PAGE || (total > 0 && results.length >= total)) break;
             }
             return results;
         },

@@ -1,8 +1,4 @@
-// Saucepan (saucepan.ai) client API - used via the DataCat provider.
-//
-// Saucepan is surfaced as a source-kind within DataCat rather than a standalone
-// provider, but its API is distinct enough (search, companion detail, native
-// fragment-based definition extraction, CDN image proxying) to live on its own.
+// Saucepan (saucepan.ai) client API.
 //
 // All calls go through cl-helper (/plugins/cl-helper/saucepan-*), never ST's
 // /proxy/: Saucepan responds with zstd-compressed bodies that ST's proxy
@@ -11,18 +7,15 @@
 // zstd) and performs the auth'd definition fetch + fragment reassembly.
 
 import { CL_HELPER_PLUGIN_BASE } from '../provider-utils.js';
+import { SAUCEPAN_CDN_PROXY_BASE, resolveSaucepanImageUrl } from './saucepan-images.js';
+
+export { SAUCEPAN_CDN_PROXY_BASE, resolveSaucepanImageUrl } from './saucepan-images.js';
 
 // ========================================
 // CONSTANTS
 // ========================================
 
 const SAUCEPAN_PROXY_BASE = `${CL_HELPER_PLUGIN_BASE}/saucepan-proxy`;
-
-// Saucepan CDN images can't be hotlinked: the CDN answers with
-// Cross-Origin-Resource-Policy: same-origin, so the browser refuses to render
-// them from our origin. Route them through cl-helper's proxy instead. Images
-// live at saucepan.ai/cdn/{imageId}/card; plugin routes are prefixed with /api.
-export const SAUCEPAN_CDN_PROXY_BASE = `/api${CL_HELPER_PLUGIN_BASE}/saucepan-proxy/cdn/`;
 
 const SAUCEPAN_ORDER_MAP = {
     saucepan_new: 'created',
@@ -61,33 +54,6 @@ async function saucepanFetch(method, apiPath, body) {
     return method === 'POST'
         ? _apiRequest(url, 'POST', body)
         : _apiRequest(url);
-}
-
-// ========================================
-// IMAGES
-// ========================================
-
-/**
- * Rewrite a Saucepan CDN image URL to the local cl-helper proxy path.
- * Non-Saucepan URLs are returned unchanged.
- * @param {string} url
- * @returns {string}
- */
-export function resolveSaucepanImageUrl(url) {
-    if (!url || typeof url !== 'string') return url;
-    if (url.startsWith('https://saucepan.ai/cdn/')) {
-        return url.replace('https://saucepan.ai/cdn/', SAUCEPAN_CDN_PROXY_BASE);
-    }
-    // Legacy CDN host found in older DataCat rows. The host no longer
-    // resolves, but its path shape maps 1:1 onto saucepan.ai/cdn/.
-    if (url.startsWith('https://cdn.saucepan.ai/images/')) {
-        return url.replace('https://cdn.saucepan.ai/images/', SAUCEPAN_CDN_PROXY_BASE);
-    }
-    // Proxy paths from earlier builds that lack the /api prefix.
-    if (url.startsWith(`${CL_HELPER_PLUGIN_BASE}/saucepan-proxy/cdn/`)) {
-        return `/api${url}`;
-    }
-    return url;
 }
 
 // ========================================

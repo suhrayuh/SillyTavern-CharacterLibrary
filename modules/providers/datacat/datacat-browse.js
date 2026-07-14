@@ -8,6 +8,7 @@
 import { BrowseView } from '../browse-view.js';
 import CoreAPI from '../../core-api.js';
 import { IMG_PLACEHOLDER, formatNumber, BROWSE_PURIFY_CONFIG, skeletonLines, deferRender, deferCall, isMobileMode, finishBrowseImport } from '../provider-utils.js';
+import { getCharId, getCreatorId, getCreatorName, getChatCount, getMsgCount, getTotalTokens, getCreatedDate, isNsfw, getSourceKind } from '../source-hit-utils.js';
 import {
     DATACAT_API_BASE,
     resolveDatacatAvatarUrl,
@@ -32,16 +33,6 @@ import {
     createFlareSolverrSession,
     destroyFlareSolverrSession,
 } from './datacat-api.js';
-import {
-    searchSaucepan,
-    fetchSaucepanCompanion,
-    fetchSaucepanCompanionsOfUser,
-    fetchSaucepanV2Card,
-    fetchSaucepanLorebookList,
-    buildSaucepanCharacterFromHit,
-    hasSaucepanToken,
-    resolveSaucepanImageUrl,
-} from './saucepan-api.js';
 
 const {
     onElement: on,
@@ -81,15 +72,6 @@ let datacatBrowseMode = 'recent';
 // Creator browsing state
 let datacatCreatorId = null;
 let datacatCreatorName = '';
-// Source of the active creator filter:
-//   'datacat'  -> uses DataCat's /api/creators/{uuid}/characters
-//   'saucepan' -> uses saucepan.ai /api/v1/companions-of-user?handle=...
-//                 (saucepan creators are not present in DataCat's creator DB)
-let datacatCreatorSource = 'datacat';
-let saucepanCreatorHandle = '';
-// When browsing a saucepan creator, the API returns the entire list in one
-// shot, so we cache it here and paginate client-side via `loadCharacters`.
-let _saucepanCreatorFullList = [];
 let _returnToFollowing = false;
 let datacatSortMode = 'recent';
 let datacatCreatorSortMode = 'chat_count';
@@ -186,63 +168,11 @@ function clearFlareSession() {
     flareSessionPromise = null;
 }
 
-// Saucepan state
-let saucepanCurrentPage = 1;
-let saucepanTotalPages = 0;
-let saucepanSearchQuery = '';
-let saucepanOpenDefinitionOnly = true;
-let saucepanActiveTags = new Set(); // tag slugs (strings) for include filter
-let saucepanExcludedTags = new Set(); // tag slugs (strings) for exclude filter
-let saucepanDiscoveredTags = new Set(); // slugs harvested from results, merged with curated list
-
 // Extraction state
 let extractionPollTimer = null;
 let extractionTargetUrl = null;
 let extractionTargetId = null;
 let extractionStartTime = null;
-
-// ========================================
-// FIELD HELPERS (handle camelCase/snake_case from different endpoints)
-// ========================================
-
-function getCharId(hit) {
-    return hit?.characterId || hit?.character_id || hit?.id || '';
-}
-
-function getCreatorId(hit) {
-    return hit?.creatorId || hit?.creator_id || '';
-}
-
-function getCreatorName(hit) {
-    return hit?.creatorName || hit?.creator_name || '';
-}
-
-function getChatCount(hit) {
-    return parseInt(hit?.chatCount || hit?.chat_count, 10) || 0;
-}
-
-function getMsgCount(hit) {
-    return parseInt(hit?.messageCount || hit?.message_count, 10) || 0;
-}
-
-function getTotalTokens(hit) {
-    return parseInt(
-        hit?.totalTokens
-            || hit?.total_tokens
-            || hit?.token_counts?.total_tokens
-            || hit?.tokenCounts?.total_tokens,
-        10
-    ) || 0;
-}
-
-function getCreatedDate(hit) {
-    const raw = hit?.createdAt || hit?.created_at;
-    return raw ? new Date(raw).toLocaleDateString() : '';
-}
-
-function isNsfw(hit) {
-    return !!(hit?.isNsfw || hit?.is_nsfw);
-}
 
 // ========================================
 // LOCAL LIBRARY LOOKUP
@@ -262,16 +192,6 @@ function isCharInLocalLibrary(dcChar) {
 function isCharPossibleMatchObj(c) {
     if (isCharInLocalLibrary(c)) return false;
     return view.isCharPossibleMatch(c.name || '', getCreatorName(c));
-}
-
-/**
- * Map a hit's primary_content_source_kind to a normalized source id.
- * DataCat marks Saucepan items explicitly; everything else (including the
- * absence of the field on legacy rows) is treated as JanitorAI.
- * @returns {'janitor'|'saucepan'}
- */
-function getSourceKind(hit) {
-    return hit?.primary_content_source_kind === 'saucepan' ? 'saucepan' : 'janitor';
 }
 
 // ========================================
@@ -308,7 +228,6 @@ function createDatacatCard(hit) {
     const isSingleSourceMode = !hit._followedCreatorSource && (
         isJannySortMode(datacatSortMode)
         || isHampterSortMode(datacatSortMode)
-        || isSaucepanSortMode(datacatSortMode)
     );
     if (!isSingleSourceMode) {
         if (sourceKind === 'saucepan') {
@@ -448,7 +367,7 @@ async function loadCharacters(append = false) {
     if (!append && grid) {
         const loadingSource = isHampterSortMode(datacatSortMode) ? 'JanitorAI (Hampter)'
             : isJannySortMode(datacatSortMode) ? 'JanitorAI (MeiliSearch)'
-            : isSaucepanSortMode(datacatSortMode) ? 'Saucepan' : 'DataCat';
+            : 'DataCat';
         renderSkeletonGrid(grid);
     }
 
@@ -476,39 +395,14 @@ async function loadCharacters(append = false) {
         let total = 0;
 
         if (datacatBrowseMode === 'creator' && datacatCreatorId) {
-            if (datacatCreatorSource === 'saucepan') {
-                // Saucepan endpoint returns the full author list in one shot.
-                // Fetch once on the initial load, then paginate client-side.
-                if (!append) {
-                    let full = _saucepanCreatorFullList;
-                    if (!full || full.length === 0) {
-                        const data = await fetchSaucepanCompanionsOfUser(saucepanCreatorHandle);
-                        full = data?.characters || [];
-                    } else {
-                        // Re-sort the cached list (sortCreatorResults mutates in place)
-                        full = full.slice();
-                    }
-                    sortCreatorResults(full, datacatCreatorSortMode);
-                    _saucepanCreatorFullList = full;
-                    list = full.slice(0, PAGE_SIZE);
-                    total = full.length;
-                } else {
-                    list = (_saucepanCreatorFullList || []).slice(
-                        datacatCharacters.length,
-                        datacatCharacters.length + PAGE_SIZE,
-                    );
-                    total = (_saucepanCreatorFullList || []).length;
-                }
-            } else {
-                const data = await fetchDatacatCreatorCharacters(datacatCreatorId, {
-                    limit: PAGE_SIZE,
-                    offset: datacatCurrentOffset,
-                    sortBy: datacatCreatorSortMode
-                });
-                list = data?.list || [];
-                total = data?.total || 0;
-                sortCreatorResults(list, datacatCreatorSortMode);
-            }
+            const data = await fetchDatacatCreatorCharacters(datacatCreatorId, {
+                limit: PAGE_SIZE,
+                offset: datacatCurrentOffset,
+                sortBy: datacatCreatorSortMode
+            });
+            list = data?.list || [];
+            total = data?.total || 0;
+            sortCreatorResults(list, datacatCreatorSortMode);
         } else if (isJannySortMode(datacatSortMode)) {
             if (!append) meiliCurrentPage = 1;
             const data = await searchMeiliJanny({
@@ -561,30 +455,6 @@ async function loadCharacters(append = false) {
             list = data?.characters || [];
             total = data?.total || 0;
             hampterTotalPages = total > 0 ? Math.ceil(total / (data?.pageSize || 34)) : 0;
-        } else if (isSaucepanSortMode(datacatSortMode)) {
-            if (!append) saucepanCurrentPage = 1;
-            const persistentExclude = getProviderExcludeTags('datacat') || [];
-            const mergedExclude = new Set(persistentExclude);
-            for (const t of saucepanExcludedTags) mergedExclude.add(t);
-            const data = await searchSaucepan({
-                search: saucepanSearchQuery,
-                page: saucepanCurrentPage,
-                limit: PAGE_SIZE,
-                sort: datacatSortMode,
-                openDefinitionOnly: saucepanOpenDefinitionOnly,
-                tags: [...saucepanActiveTags],
-                excludedTags: [...mergedExclude],
-            });
-            list = data?.characters || [];
-            total = data?.totalCount || 0;
-            saucepanTotalPages = data?.totalPages || 0;
-            // Harvest tag slugs from results so the picker grows with what users see
-            for (const c of list) {
-                const cTags = Array.isArray(c.tags) ? c.tags : [];
-                for (const t of cTags) {
-                    if (typeof t === 'string' && t) saucepanDiscoveredTags.add(t);
-                }
-            }
         } else {
             const tagIds = [...datacatActiveTagIds];
             const parsed = parseSortMode(datacatSortMode);
@@ -618,7 +488,6 @@ async function loadCharacters(append = false) {
         const isFreshMode = datacatBrowseMode !== 'creator' && freshParsed && datacatActiveTagIds.size === 0;
         const isMeili = isJannySortMode(datacatSortMode);
         const isHampter = isHampterSortMode(datacatSortMode);
-        const isSaucepan = isSaucepanSortMode(datacatSortMode);
 
         if (isMeili) {
             if (append) {
@@ -642,17 +511,6 @@ async function loadCharacters(append = false) {
                 datacatCharacters = list;
             }
             datacatHasMore = hampterCurrentPage < hampterTotalPages;
-        } else if (isSaucepan) {
-            if (append) {
-                const existingIds = new Set(datacatCharacters.map(c => getCharId(c)));
-                datacatCharacters = datacatCharacters.concat(list.filter(c => {
-                    const id = getCharId(c);
-                    return !id || !existingIds.has(id);
-                }));
-            } else {
-                datacatCharacters = list;
-            }
-            datacatHasMore = saucepanCurrentPage < saucepanTotalPages;
         } else if (isFreshMode) {
             datacatCharacters = list;
             const activeLimit = freshParsed.window === '24h' ? datacatFreshLimit24 : datacatFreshLimitWeek;
@@ -913,34 +771,12 @@ function cycleTagState(btn, active) {
     }
 }
 
-function cycleTagStateTri(btn, state) {
-    if (!btn) return;
-    btn.className = 'browse-tag-state-btn';
-    if (state === 'include') {
-        btn.classList.add('state-include');
-        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
-        btn.title = 'Included \u2014 click to exclude';
-    } else if (state === 'exclude') {
-        btn.classList.add('state-exclude');
-        btn.innerHTML = '<i class="fa-solid fa-minus"></i>';
-        btn.title = 'Excluded \u2014 click to clear';
-    } else {
-        btn.classList.add('state-neutral');
-        btn.innerHTML = '';
-        btn.title = 'Neutral \u2014 click to include';
-    }
-}
-
 function updateTagsButton() {
     const btn = document.getElementById('datacatTagsBtn');
     const label = document.getElementById('datacatTagsBtnLabel');
     if (!btn) return;
 
-    const count = isJannyTagMode()
-        ? jannyActiveTagIds.size
-        : isSaucepanTagMode()
-            ? saucepanActiveTags.size + saucepanExcludedTags.size
-            : datacatActiveTagIds.size;
+    const count = isJannyTagMode() ? jannyActiveTagIds.size : datacatActiveTagIds.size;
     if (count > 0) {
         btn.classList.add('has-filters');
         if (label) label.innerHTML = `Tags <span class="tag-count">(${count})</span>`;
@@ -958,10 +794,6 @@ function isJannyTagMode() {
     return isJannySortMode(datacatSortMode);
 }
 
-function isSaucepanTagMode() {
-    return isSaucepanSortMode(datacatSortMode);
-}
-
 function updateTagsVisibility() {
     const btn = document.getElementById('datacatTagsBtn');
     if (!btn) return;
@@ -974,39 +806,19 @@ function updateTagsVisibility() {
     }
 }
 
-function updateOpenDefToggleVisibility() {
-    const btn = document.getElementById('datacatOpenDefToggle');
-    if (!btn) return;
-    btn.style.display = isSaucepanSortMode(datacatSortMode) ? '' : 'none';
-}
-
 function updateSourceFilterVisibility() {
     const section = document.getElementById('datacatFilterSourceSection');
     if (!section) return;
     // Source filters only meaningful in DataCat-native sort modes (mixed sources).
-    // Single-source modes (janny_*, hampter_*, saucepan_*) make these filters useless.
+    // Single-source modes (janny_*, hampter_*) make these filters useless.
     // Following view always mixes sources from followed creators, so always show.
     if (datacatViewMode === 'following') {
         section.style.display = '';
         return;
     }
     const isSingleSourceMode = isJannySortMode(datacatSortMode)
-        || isHampterSortMode(datacatSortMode)
-        || isSaucepanSortMode(datacatSortMode);
+        || isHampterSortMode(datacatSortMode);
     section.style.display = isSingleSourceMode ? 'none' : '';
-}
-
-function updateOpenDefToggle() {
-    const btn = document.getElementById('datacatOpenDefToggle');
-    if (!btn) return;
-    btn.classList.toggle('active', saucepanOpenDefinitionOnly);
-    btn.title = saucepanOpenDefinitionOnly
-        ? 'Showing only open-definition characters \u2014 click to include closed'
-        : 'Including closed-definition characters \u2014 click to hide';
-    const label = btn.querySelector('span');
-    if (label) label.textContent = saucepanOpenDefinitionOnly ? 'Open Defs' : 'All Defs';
-    const icon = btn.querySelector('i');
-    if (icon) icon.className = saucepanOpenDefinitionOnly ? 'fa-solid fa-lock-open' : 'fa-solid fa-lock';
 }
 
 const JANNY_ALL_TAGS = Object.entries(JANNY_TAG_MAP)
@@ -1059,139 +871,6 @@ function renderJannyTagsList(filter = '') {
 }
 
 // ========================================
-// SAUCEPAN TAG SYSTEM
-// ========================================
-
-// Curated seed list of Saucepan tag slugs. Saucepan exposes tags as plain
-// slug strings (no listing endpoint), so we ship a known set and merge in
-// any new slugs discovered in search results (`saucepanDiscoveredTags`).
-const SAUCEPAN_KNOWN_TAGS = [
-    'abuse','action','adventure','adventurer','age_gap','age_play','alien','ambitious','angst','anime',
-    'anti_hero','anxious','any_pov','arranged_marriage','artist','assassin','assistant','athlete',
-    'bakadere','bar','bartender','bdsm','bdsm_verse','beach','best_friend','betrayal','bi','biker',
-    'bimbo_himbo','blackmail','blood_play','blue_collar','body_horror','body_worship','bodyguard',
-    'bondage','boss','bottom','brat','brat_taming','breastplay','breath_play','breeding','bully',
-    'business_owner','cannibalism','captive','celebrity','chance_meeting','charismatic','cheating',
-    'chef','childhood_friend','chosen_one','closeted','club','cnc','colleagues_to_lovers','college',
-    'comedy','comfort','comic','coming_of_age','concubine','conspiracy','contemporary','content_creator',
-    'contractual_relationship','cowboy_cowgirl','crush','curse','cyberpunk','dandere','daredevil',
-    'dark_romance','dead_dove','death','deity','demi_human','demi_pov','demisexual','demon','deredere',
-    'detective','dilf','disabled','doctor','dom','drag_crossdress','dragon','drugs_addiction','dystopian',
-    'eldritch','elf','emo','emotionally_unavailable','empath','empathetic','enemies_to_lovers','enhanced',
-    'ensemble_cast','esl','ex','executive','exhibitionism','extroverted','face_sitting','fake_relationship',
-    'fantasy','farm_setting','farmer','fem','fem_pov','female','femboy','feral','filthy','firefighter',
-    'fluff','food_play','forbidden_love','forced_proximity','found_family','freedom','freeuse',
-    'friends_to_lovers','furry','futa','fwb','game','gangster','gender_bend','genderfluid','genki',
-    'gentle_giant','giant','gore','grumpy','gyaru','hair_kink','harem','healer','heat_rut','hedonistic',
-    'hero','hikikomori','himedere','historical','holidays','home','homeless','hookup','horror','hospital',
-    'hostage','housespouse','human','humiliation','hunter','hurt_comfort','hurt_no_comfort','hyper',
-    'identity','impact_play','incel','incest_stepcest','indentured','independent','injured_user',
-    'interactive_rpg','intern','intersex','intersex_pov','introverted','jock','justice','kakkodere',
-    'kamidere','kouhai','kuudere','laboratory','lactation','large_anatomy','lore_heavy','love_triangle',
-    'lover','loyal','m4a','m4w','mafia','mage','magical','maid_butler','male','male_pov','manipulator',
-    'mansion','martial_artist','masc','masochist','mastermind','masturbation','mean_catty','mechanic',
-    'medieval','mentally_ill','milf','military','mind_control','mlm','monster','monster_boy',
-    'monster_girl','monster_pov','movie','multiple','murderer','musician','mutant','mystery',
-    'mythological','needy_clingy','neighbor','nerd','neurodivergent','ninja_samurai','nobility','noir',
-    'non_canonical_au','non_human','non_human_genitalia','non_human_pov','noncon_dubcon','ntr','nurse',
-    'o_l','oc','olfactophilia','omegaverse','online','oral','orgasm_denial','ovipositor','owner',
-    'pansexual','parallel_universe','part_timer','partner','party_member','performer','person_next_door',
-    'perverted','pet_play','pimp','pirate','platonic','playful','plus_sized_bot','plushophilia',
-    'politics','popular','porn_star','portal','post_apocalyptic','power_dynamics','praise_kink',
-    'pregnant','primal_play','prison','pro_dom','promiscuous','psychological','queer','quest','racer',
-    'redemption','rejection','religion','reluctant_hero','revenge','rival','robot','rogue','romance',
-    'roommate','royalty','rpg','sacrifice','sadist','sassy','savior','scenario','sci_fi','scientist',
-    'second_person_pov','self_harm_suicide','selfish','sensitive','sensory_play','servant','sex_toys',
-    'sex_worker','sexual_awakening','sexual_roleplay','size_difference','slice_of_life','slow_burn',
-    'slur_usage','small_town','smut','soft_dom','soldier','somnophilia','soulmate','space',
-    'special_agents','spouse','spy','stalker','step_parent','step_sibling','stoner','stranger',
-    'stripper','student','sub','sugar_parent','supernatural','survival','switch','t4t','t4w',
-    'tavern_inn','teacher_professor','teammate','temperature_play','therapist','third_person_pov',
-    'thriller','time_travel','tomboy','top','trans','transformation','trauma','tsundere','tv_show',
-    'two_faced','undead','unemployed','unestablished_relationship','unreliable','unreliable_narrator',
-    'unrequited_love','urban_fantasy','urban_fiction','user_harm','utility','vampire','vanilla',
-    'villain','villain_pov','villainess','vintage','violence','virgin','voyeurism','vtuber','w4a',
-    'w4m','war','warrior','watersports','wealthy','weapon_play','well_intentioned_extremist',
-    'werewolf','white_collar','widowed','wlw','workplace','writer','y2k','yandere',
-];
-
-function getSaucepanAllTags() {
-    const merged = new Set(SAUCEPAN_KNOWN_TAGS);
-    for (const t of saucepanDiscoveredTags) merged.add(t);
-    return [...merged].sort((a, b) => a.localeCompare(b));
-}
-
-function formatSaucepanTag(slug) {
-    return slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function renderSaucepanTagsList(filter = '') {
-    const container = document.getElementById('datacatTagsList');
-    if (!container) return;
-
-    const all = getSaucepanAllTags();
-    const filterLower = filter.toLowerCase();
-    const filtered = filter ? all.filter(t => t.includes(filterLower)) : all;
-
-    if (filtered.length === 0) {
-        container.innerHTML = '<div class="browse-tags-empty">No matching tags</div>';
-        return;
-    }
-
-    // Sort: active filters (include or exclude) first, then alphabetical
-    const sorted = [...filtered].sort((a, b) => {
-        const aActive = saucepanActiveTags.has(a) || saucepanExcludedTags.has(a);
-        const bActive = saucepanActiveTags.has(b) || saucepanExcludedTags.has(b);
-        if (aActive && !bActive) return -1;
-        if (!aActive && bActive) return 1;
-        return a.localeCompare(b);
-    });
-
-    container.innerHTML = sorted.map(slug => {
-        const state = saucepanActiveTags.has(slug) ? 'include'
-            : saucepanExcludedTags.has(slug) ? 'exclude'
-            : 'neutral';
-        const stateClass = `state-${state}`;
-        const stateIcon = state === 'include' ? '<i class="fa-solid fa-check"></i>'
-            : state === 'exclude' ? '<i class="fa-solid fa-minus"></i>'
-            : '';
-        const stateTitle = state === 'include' ? 'Included \u2014 click to exclude'
-            : state === 'exclude' ? 'Excluded \u2014 click to clear'
-            : 'Neutral \u2014 click to include';
-        return `
-            <div class="browse-tag-filter-item" data-tag-slug="${escapeHtml(slug)}">
-                <button class="browse-tag-state-btn ${stateClass}" title="${stateTitle}">${stateIcon}</button>
-                <span class="tag-label">${escapeHtml(formatSaucepanTag(slug))}</span>
-            </div>
-        `;
-    }).join('');
-
-    container.querySelectorAll('.browse-tag-filter-item').forEach(item => {
-        const slug = item.dataset.tagSlug;
-        const stateBtn = item.querySelector('.browse-tag-state-btn');
-        const cycle = () => {
-            // neutral -> include -> exclude -> neutral
-            if (saucepanActiveTags.has(slug)) {
-                saucepanActiveTags.delete(slug);
-                saucepanExcludedTags.add(slug);
-                cycleTagStateTri(stateBtn, 'exclude');
-            } else if (saucepanExcludedTags.has(slug)) {
-                saucepanExcludedTags.delete(slug);
-                cycleTagStateTri(stateBtn, 'neutral');
-            } else {
-                saucepanActiveTags.add(slug);
-                cycleTagStateTri(stateBtn, 'include');
-            }
-            updateTagsButton();
-            saucepanCurrentPage = 1;
-            datacatCurrentOffset = 0;
-            loadCharacters(false);
-        };
-        item.addEventListener('click', cycle);
-    });
-}
-
-// ========================================
 // SORT OPTIONS
 // ========================================
 
@@ -1217,15 +896,10 @@ function isHampterSortMode(mode) {
     return mode?.startsWith('hampter_');
 }
 
-function isSaucepanSortMode(mode) {
-    return mode?.startsWith('saucepan_');
-}
-
 function parseSortMode(mode) {
     if (mode === 'recent') return null;
     if (isJannySortMode(mode)) return null;
     if (isHampterSortMode(mode)) return null;
-    if (isSaucepanSortMode(mode)) return null;
     if (mode.endsWith('_week')) return { sortBy: mode.slice(0, -5), window: 'week' };
     if (mode.endsWith('_24h')) return { sortBy: mode.slice(0, -4), window: '24h' };
     return { sortBy: mode, window: '24h' };
@@ -1242,12 +916,6 @@ const JANNY_SORT_OPTIONS = [
 const HAMPTER_SORT_OPTIONS = [
     { value: 'hampter_trending', label: '🔥 Trending' },
     { value: 'hampter_popular', label: '👑 Popular' },
-];
-
-const SAUCEPAN_SORT_OPTIONS = [
-    { value: 'saucepan_new', label: '🆕 New' },
-    { value: 'saucepan_trending', label: '🔥 Trending' },
-    { value: 'saucepan_popular', label: '👑 Popular' },
 ];
 
 function buildSortOptionsHtml(selected) {
@@ -1270,11 +938,6 @@ function buildSortOptionsHtml(selected) {
     html += '</optgroup>';
     html += '<optgroup label="JanitorAI (MeiliSearch)">';
     for (const o of JANNY_SORT_OPTIONS) {
-        html += `<option value="${o.value}" ${o.value === selected ? 'selected' : ''}>${o.label}</option>`;
-    }
-    html += '</optgroup>';
-    html += '<optgroup label="Saucepan">';
-    for (const o of SAUCEPAN_SORT_OPTIONS) {
         html += `<option value="${o.value}" ${o.value === selected ? 'selected' : ''}>${o.label}</option>`;
     }
     html += '</optgroup>';
@@ -1318,14 +981,10 @@ function sortCreatorResults(list, mode) {
 // CREATOR BROWSING
 // ========================================
 
-async function browseCreator(creatorId, opts = {}) {
+async function browseCreator(creatorId) {
     if (!creatorId) return;
-    const source = opts.source === 'saucepan' ? 'saucepan' : 'datacat';
     datacatBrowseMode = 'creator';
     datacatCreatorId = creatorId;
-    datacatCreatorSource = source;
-    saucepanCreatorHandle = source === 'saucepan' ? (opts.handle || '') : '';
-    _saucepanCreatorFullList = [];
     datacatCurrentOffset = 0;
     datacatCharacters = [];
     datacatHasMore = true;
@@ -1334,18 +993,13 @@ async function browseCreator(creatorId, opts = {}) {
     const banner = document.getElementById('datacatCreatorBanner');
     const bannerName = document.getElementById('datacatCreatorBannerName');
 
-    if (source === 'saucepan') {
-        // Saucepan creators aren't on DataCat - skip the creator profile lookup.
-        datacatCreatorName = opts.name || saucepanCreatorHandle || creatorId;
+    const creator = await fetchDatacatCreator(creatorId);
+    if (creator) {
+        datacatCreatorName = creator.userName || creatorId;
     } else {
-        const creator = await fetchDatacatCreator(creatorId);
-        if (creator) {
-            datacatCreatorName = creator.userName || creatorId;
-        } else {
-            datacatCreatorName = creatorId;
-        }
+        datacatCreatorName = creatorId;
     }
-    view._cdRef = { creatorId, source, name: datacatCreatorName, handle: saucepanCreatorHandle };
+    view._cdRef = { creatorId, source: 'datacat', name: datacatCreatorName };
 
     if (banner && bannerName) {
         bannerName.textContent = datacatCreatorName;
@@ -1353,7 +1007,7 @@ async function browseCreator(creatorId, opts = {}) {
         window.pushOverlayGuard?.();
     }
 
-    updateFollowButton(creatorId, source);
+    updateFollowButton(creatorId);
 
     datacatCreatorSortMode = 'chat_count';
     const creatorSortEl = document.getElementById('datacatCreatorSortSelect');
@@ -1368,9 +1022,6 @@ function clearCreatorFilter() {
     datacatBrowseMode = 'recent';
     datacatCreatorId = null;
     datacatCreatorName = '';
-    datacatCreatorSource = 'datacat';
-    saucepanCreatorHandle = '';
-    _saucepanCreatorFullList = [];
     datacatCharacters = [];
     datacatCurrentOffset = 0;
     datacatFreshLimit24 = 80;
@@ -1434,12 +1085,6 @@ function doSearch() {
             hampterCurrentPage = 1;
             loadCharacters(false);
         }
-        // Clear Saucepan query if in saucepan mode and search is emptied
-        if (isSaucepanSortMode(datacatSortMode) && saucepanSearchQuery) {
-            saucepanSearchQuery = '';
-            saucepanCurrentPage = 1;
-            loadCharacters(false);
-        }
         return;
     }
 
@@ -1475,11 +1120,11 @@ function doSearch() {
             }
         }
 
-        // Saucepan URL -> look up on DataCat, offer extraction if not found
+        // Saucepan URL -> route directly to the first-class Saucepan provider.
         if (/^(www\.)?saucepan\.ai$/i.test(url.hostname)) {
             const charMatch = url.pathname.match(/\/companion\/([a-f0-9-]{36})/i);
             if (charMatch) {
-                lookupExternalCharacter(charMatch[1], val, 'saucepan');
+                delegateSaucepanHit({ character_id: charMatch[1], id: charMatch[1], primary_content_source_kind: 'saucepan', _source: 'saucepan' });
                 return;
             }
         }
@@ -1498,14 +1143,6 @@ function doSearch() {
         meiliSearchQuery = val;
         meiliCurrentPage = 1;
         datacatCurrentOffset = 0;
-        loadCharacters(false);
-        return;
-    }
-
-    // Text search in Saucepan mode
-    if (isSaucepanSortMode(datacatSortMode)) {
-        saucepanSearchQuery = val;
-        saucepanCurrentPage = 1;
         loadCharacters(false);
         return;
     }
@@ -1543,8 +1180,7 @@ function performDatacatCreatorSearch() {
         const creatorId = getCreatorId(hit);
         if (!creatorId) return false;
         if (getSourceKind(hit) === 'saucepan') {
-            const handle = getCreatorName(hit);
-            browseCreator(creatorId, { source: 'saucepan', handle, name: handle });
+            delegateSaucepanCreator(hit);
         } else {
             browseCreator(creatorId);
         }
@@ -1579,13 +1215,6 @@ function performDatacatCreatorSearch() {
     const partialFollowing = datacatFollowingCharacters.find(c => getCreatorName(c).toLowerCase().includes(lowerQuery));
     if (partialFollowing && routeFromHit(partialFollowing)) return;
 
-    // No local match. If we're in a saucepan sort mode, treat the input as a
-    // saucepan handle and try fetching the author's companions directly.
-    if (isSaucepanSortMode(datacatSortMode)) {
-        browseCreator(query, { source: 'saucepan', handle: query, name: query });
-        return;
-    }
-
     showToast('Creator not found. Try pasting a DataCat creator URL instead.', 'warning');
 }
 
@@ -1610,7 +1239,7 @@ async function fetchCharacterAndOpenPreview(characterId) {
 }
 
 // ========================================
-// EXTERNAL SOURCE LOOKUP + EXTRACTION (JanitorAI, Saucepan)
+// EXTERNAL SOURCE LOOKUP + EXTRACTION (JanitorAI)
 // ========================================
 
 const EXTRACT_SOURCES = {
@@ -1619,12 +1248,6 @@ const EXTRACT_SOURCES = {
         icon: 'fa-solid fa-cat',
         urlBase: 'https://janitorai.com/characters/',
         notFoundCopy: 'JanitorAI character',
-    },
-    saucepan: {
-        label: 'Saucepan',
-        icon: 'fa-solid fa-bowl-food',
-        urlBase: 'https://saucepan.ai/companion/',
-        notFoundCopy: 'Saucepan character',
     },
 };
 
@@ -2095,14 +1718,12 @@ function unfollowCreator(creatorId, source = 'datacat') {
     showToast(`Unfollowed ${name || 'creator'}`, 'info');
 }
 
-function updateFollowButton(creatorId, source = datacatCreatorSource) {
+function updateFollowButton(creatorId) {
     const btn = document.getElementById('datacatFollowCreatorBtn');
     if (!btn) return;
 
     if (datacatBrowseMode !== 'creator' || datacatCreatorId !== creatorId) return;
-    if (datacatCreatorSource !== source) return;
-
-    if (isCreatorFollowed(creatorId, source)) {
+    if (isCreatorFollowed(creatorId)) {
         btn.classList.add('active');
         btn.innerHTML = '<i class="fa-solid fa-heart"></i> <span>Following</span>';
         btn.title = 'Unfollow this creator';
@@ -2189,23 +1810,6 @@ async function loadFollowingCharacters(forceRefresh = false) {
             const promises = batch.map(async (creator) => {
                 try {
                     const allChars = [];
-                    const source = creator.source || 'datacat';
-
-                    if (source === 'saucepan') {
-                        const handle = creator.name; // saucepan handle is stored as name
-                        if (!handle) return [];
-                        const data = await fetchSaucepanCompanionsOfUser(handle);
-                        for (const c of (data?.characters || [])) {
-                            allChars.push({
-                                ...c,
-                                _followedCreatorName: creator.name,
-                                _followedCreatorId: creator.id,
-                                _followedCreatorSource: 'saucepan',
-                            });
-                        }
-                        return allChars;
-                    }
-
                     let offset = 0;
                     const limit = 50;
                     while (true) {
@@ -2335,7 +1939,7 @@ function _handleFollowingCardClick(e) {
             const charId = card?.dataset?.datacatId;
             const hit = charId ? datacatFollowingCharacters.find(c => String(getCharId(c)) === charId) : null;
             if (hit && getSourceKind(hit) === 'saucepan') {
-                browseCreator(creatorId, { source: 'saucepan', handle: getCreatorName(hit), name: getCreatorName(hit) });
+                delegateSaucepanCreator(hit);
             } else {
                 browseCreator(creatorId);
             }
@@ -2422,7 +2026,34 @@ let datacatDetailFetchToken = 0;
 let datacatDetailFetchPromise = null;
 let datacatLastCreatorNotes = '';
 
+async function delegateSaucepanHit(hit) {
+    const provider = CoreAPI.getProvider('saucepan');
+    if (!provider?.browseView?.openAggregatedHit) {
+        showToast('Saucepan provider is not available', 'error');
+        return false;
+    }
+    await CoreAPI.activateOnlineProvider?.('saucepan');
+    await provider.browseView.openAggregatedHit(hit);
+    return true;
+}
+
+async function delegateSaucepanCreator(hit) {
+    const handle = getCreatorName(hit);
+    const provider = CoreAPI.getProvider('saucepan');
+    if (!handle || !provider?.browseView?.browseCreator) {
+        showToast('Saucepan creator is not available', 'warning');
+        return false;
+    }
+    await CoreAPI.activateOnlineProvider?.('saucepan');
+    await provider.browseView.browseCreator(handle);
+    return true;
+}
+
 function openPreviewModal(hit) {
+    if (getSourceKind(hit) === 'saucepan') {
+        delegateSaucepanHit(hit);
+        return;
+    }
     datacatSelectedChar = hit;
 
     // Ensure modal DOM exists and event listeners are wired even when called
@@ -2458,13 +2089,8 @@ function openPreviewModal(hit) {
     document.getElementById('datacatCharCreator').textContent = creatorName;
     const openBtn = document.getElementById('datacatOpenInBrowserBtn');
     if (openBtn) {
-        if (getSourceKind(hit) === 'saucepan') {
-            openBtn.href = `https://saucepan.ai/companion/${charId}`;
-            openBtn.title = 'Open on Saucepan';
-        } else {
-            openBtn.href = `${DATACAT_API_BASE}/characters/${charId}`;
-            openBtn.title = 'Open on DataCat';
-        }
+        openBtn.href = `${DATACAT_API_BASE}/characters/${charId}`;
+        openBtn.title = 'Open on DataCat';
     }
 
     // Stats (adapt to available data)
@@ -2560,29 +2186,9 @@ function openPreviewModal(hit) {
 async function fetchAndPopulateDetails(hit, token) {
     const charId = getCharId(hit);
     const name = hit.name || 'Unknown';
-    const isSaucepanHit = getSourceKind(hit) === 'saucepan';
 
-    // For Saucepan hits, fetch companion detail in parallel to learn whether
-    // the definition is publicly open. The search/listing endpoint omits
-    // `open_definition`, so this is the only way to surface a lock warning.
-    const saucepanDetailPromise = isSaucepanHit
-        ? fetchSaucepanCompanion(charId).catch(() => null)
-        : Promise.resolve(null);
-
-    function renderLockedDefBanner() {
-        return `
-            <div class="datacat-modal-locked-banner">
-                <i class="fa-solid fa-lock"></i>
-                <div>
-                    <strong>Locked Definition</strong>
-                    <p>This Saucepan companion's definition is not publicly available. Extraction may not retrieve the full character body.</p>
-                </div>
-            </div>
-        `;
-    }
-
-    function showExtractionCTA(message, { locked = false } = {}) {
-        const source = isSaucepanHit ? 'saucepan' : 'janitor';
+    function showExtractionCTA(message) {
+        const source = 'janitor';
         const cfg = EXTRACT_SOURCES[source];
         // Unextracted cards have no body fields, so skeletons left from modal-open never resolve.
         const hideIds = ['datacatCharScenarioSection', 'datacatCharFirstMsgSection', 'datacatCharMesExampleSection'];
@@ -2609,7 +2215,6 @@ async function fetchAndPopulateDetails(hit, token) {
         const descEl = document.getElementById('datacatCharDescription');
         if (descSection) descSection.style.display = 'block';
         if (descEl) descEl.innerHTML = `
-            ${locked ? renderLockedDefBanner() : ''}
             <div class="datacat-modal-extract-cta">
                 <div class="datacat-modal-extract-icon-wrap">
                     <i class="fa-solid fa-wand-magic-sparkles datacat-modal-extract-icon"></i>
@@ -2643,26 +2248,12 @@ async function fetchAndPopulateDetails(hit, token) {
 
         if (token !== datacatDetailFetchToken) return;
 
-        // DataCat doesn't know this Saucepan character. With a Saucepan token
-        // we can pull the definition natively and render/import it without
-        // DataCat's extraction service.
-        if (!character && isSaucepanHit && hasSaucepanToken()) {
-            const v2Card = await fetchSaucepanV2Card(hit).catch(() => null);
-            if (token !== datacatDetailFetchToken) return;
-            if (v2Card) character = buildSaucepanCharacterFromHit(hit, v2Card);
-        }
-
         // Hide the loading indicator
         const defLoading = document.getElementById('datacatCharDefinitionLoading');
         if (defLoading) defLoading.style.display = 'none';
 
         if (!character) {
-            const saucepanDetail = await saucepanDetailPromise;
-            const lockedDef = isSaucepanHit && saucepanDetail && saucepanDetail.open_definition === false;
-            showExtractionCTA(isSaucepanHit
-                ? 'This Saucepan character has not been extracted to DataCat yet.'
-                : 'Character definition is hidden or unavailable.',
-                { locked: lockedDef });
+            showExtractionCTA('Character definition is hidden or unavailable.');
             return;
         }
 
@@ -2681,37 +2272,18 @@ async function fetchAndPopulateDetails(hit, token) {
             }
         }
 
-        // Only Saucepan repair variants overload description with the body; janitor variants mirror the row blurb and must never paint as the body.
         const recoveredVariant = pickRecoveryVariant(character);
-        const charIsSaucepan = getSourceKind(character) === 'saucepan' || getSourceKind(hit) === 'saucepan';
         const v2Data = character?.chara_card_v2_json?.data || null;
-        const saucepanBody = charIsSaucepan
-            ? (recoveredVariant?.description || v2Data?.description || character.description || '')
-            : '';
-        const personality = charIsSaucepan
-            ? saucepanBody
-            : (character.personality || recoveredVariant?.personality || stripDatacatMarkers(v2Data?.description) || '');
+        const personality = character.personality || recoveredVariant?.personality || stripDatacatMarkers(v2Data?.description) || '';
         const scenario = recoveredVariant?.scenario || character.scenario || v2Data?.scenario || '';
         const firstMessage = recoveredVariant?.first_message || character.first_message || v2Data?.first_mes || '';
-        const canPaintBody = !!recoveredVariant || !charIsSaucepan || !!saucepanBody;
-
-        // Resolve Saucepan lock state if we have detail data. When the
-        // character is on DataCat but the definition is locked AND we have
-        // no recovered variant, the body sections are empty: surface a
-        // banner so the user understands why.
-        const saucepanDetail = await saucepanDetailPromise;
-        const saucepanLocked = isSaucepanHit && saucepanDetail && saucepanDetail.open_definition === false;
-        const showLockedBanner = saucepanLocked && !recoveredVariant;
 
         const descSection = document.getElementById('datacatCharDescriptionSection');
         if (descSection) {
             const descEl = document.getElementById('datacatCharDescription');
-            if (personality && canPaintBody) {
+            if (personality) {
                 descSection.style.display = 'block';
-                if (descEl) descEl.innerHTML = `${showLockedBanner ? renderLockedDefBanner() : ''}${safePurify(formatRichText(personality, name, true), BROWSE_PURIFY_CONFIG)}`;
-            } else if (showLockedBanner) {
-                descSection.style.display = 'block';
-                if (descEl) descEl.innerHTML = renderLockedDefBanner();
+                if (descEl) descEl.innerHTML = safePurify(formatRichText(personality, name, true), BROWSE_PURIFY_CONFIG);
             } else {
                 descSection.style.display = 'none';
                 if (descEl) descEl.innerHTML = '';
@@ -2720,7 +2292,7 @@ async function fetchAndPopulateDetails(hit, token) {
 
         const scenarioSection = document.getElementById('datacatCharScenarioSection');
         const scenarioEl = document.getElementById('datacatCharScenario');
-        if (scenarioSection && scenario && canPaintBody) {
+        if (scenarioSection && scenario) {
             scenarioSection.style.display = 'block';
             if (scenarioEl) deferRender(scenarioEl, () => safePurify(formatRichText(scenario, name, true), BROWSE_PURIFY_CONFIG));
         } else if (scenarioSection) {
@@ -2729,7 +2301,7 @@ async function fetchAndPopulateDetails(hit, token) {
 
         const firstMsgSection = document.getElementById('datacatCharFirstMsgSection');
         const firstMsgEl = document.getElementById('datacatCharFirstMsg');
-        if (firstMsgSection && firstMessage && canPaintBody) {
+        if (firstMsgSection && firstMessage) {
             firstMsgSection.style.display = 'block';
             if (firstMsgEl) {
                 deferRender(firstMsgEl, () => safePurify(formatRichText(firstMessage, name, true), BROWSE_PURIFY_CONFIG));
@@ -2751,16 +2323,7 @@ async function fetchAndPopulateDetails(hit, token) {
         if (tokensEl && fullTokens) tokensEl.textContent = formatNumber(fullTokens);
 
         // Refresh creator notes only if content changed (avoids iframe rebuild flash).
-        // Source field differs by row kind: JanitorAI puts the blurb in
-        // `character.description`; Saucepan puts the body there and exposes
-        // the actual blurb via `companion_snapshot.full_description` (with
-        // formatting markers) or the V2 mapping in `chara_card_v2_json.data`.
-        const fullCreatorNotes = (charIsSaucepan
-            ? (character?.companion_snapshot?.full_description
-                || character?.intercepted_chat_data?.companion_snapshot?.full_description
-                || v2Data?.creator_notes
-                || '')
-            : (character.description || '')).trim();
+        const fullCreatorNotes = (character.description || '').trim();
         const creatorNotesSection = document.getElementById('datacatCharCreatorNotesSection');
         const creatorNotesEl = document.getElementById('datacatCharCreatorNotes');
         if (fullCreatorNotes && fullCreatorNotes !== datacatLastCreatorNotes) {
@@ -2785,43 +2348,7 @@ async function fetchAndPopulateDetails(hit, token) {
             }
         }
 
-        // Linked lorebooks (metadata-only display).
-        // DataCat stores attached lorebooks/scripts on `character.scripts[]`.
-        // Saucepan characters don't have `scripts[]`, so fetch lorebook names
-        // from the Saucepan API when the hit is saucepan-sourced and has any.
-        if (charIsSaucepan && hit?.character_id) {
-            try {
-                const saucepanLorebooks = await fetchSaucepanLorebookList(hit.character_id);
-                if (saucepanLorebooks.length > 0) {
-                    renderDatacatLorebooks(saucepanLorebooks);
-                } else {
-                    renderDatacatLorebooks(character.scripts);
-                }
-            } catch (_) {
-                renderDatacatLorebooks(character.scripts);
-            }
-        } else {
-            renderDatacatLorebooks(character.scripts);
-        }
-
-        // Saucepan portraits gallery
-        const portraits = character?.companion_snapshot?.portraits;
-        if (Array.isArray(portraits) && portraits.length > 0) {
-            const gallerySection = document.getElementById('datacatCharGallerySection');
-            const galleryGrid = document.getElementById('datacatCharGalleryGrid');
-            const galleryLabel = document.getElementById('datacatCharGalleryLabel');
-            if (gallerySection && galleryGrid) {
-                gallerySection.style.display = 'block';
-                if (galleryLabel) galleryLabel.textContent = `(${portraits.length})`;
-                galleryGrid.innerHTML = portraits.map(p => {
-                    // CORP headers block hotlinking; route through cl-helper.
-                    const url = resolveSaucepanImageUrl(p?.image?.highres_url);
-                    if (!url) return '';
-                    const title = p?.description || p?.name || 'Gallery image';
-                    return `<div class="browse-gallery-cell"><img class="browse-gallery-thumb" src="${escapeHtml(url)}" alt="${escapeHtml(title)}" title="${escapeHtml(title)}" loading="lazy" onload="this.parentElement.classList.add('loaded')" onerror="this.parentElement.classList.add('load-failed')"></div>`;
-                }).join('');
-            }
-        }
+        renderDatacatLorebooks(character.scripts);
 
         // Enable import button now that full character data is confirmed
         const importBtn = document.getElementById('datacatImportBtn');
@@ -2860,29 +2387,22 @@ async function fetchAndPopulateDetails(hit, token) {
             // already prefers /download via buildV2FromDownload, so this
             // mirrors that behavior.
             //
-            // Exception: Saucepan with a recovery variant. The recovered
-            // variant is the only authoritative source for repaired cards;
-            // /download returns empty fields in that case.
-            const useRecoveryAsAuthority = charIsSaucepan && !!recoveredVariant;
-            const needSaucepanFallback = charIsSaucepan && !recoveredVariant;
             if (d) {
                 const dlDesc = d.personality || d.description || '';
-                const shouldOverwriteDesc = !useRecoveryAsAuthority
-                    && dlDesc
-                    && (needSaucepanFallback || !personality || dlDesc !== personality);
+                const shouldOverwriteDesc = dlDesc && (!personality || dlDesc !== personality);
                 if (shouldOverwriteDesc) {
                     const ds = document.getElementById('datacatCharDescriptionSection');
                     const de = document.getElementById('datacatCharDescription');
                     if (ds) ds.style.display = 'block';
-                    if (de) de.innerHTML = `${showLockedBanner ? renderLockedDefBanner() : ''}${safePurify(formatRichText(dlDesc, name, true), BROWSE_PURIFY_CONFIG)}`;
+                    if (de) de.innerHTML = safePurify(formatRichText(dlDesc, name, true), BROWSE_PURIFY_CONFIG);
                 }
-                if (d.scenario && !useRecoveryAsAuthority && (needSaucepanFallback || !scenario || d.scenario !== scenario)) {
+                if (d.scenario && (!scenario || d.scenario !== scenario)) {
                     const ss = document.getElementById('datacatCharScenarioSection');
                     const se = document.getElementById('datacatCharScenario');
                     if (ss) ss.style.display = 'block';
                     if (se) deferRender(se, () => safePurify(formatRichText(d.scenario, name, true), BROWSE_PURIFY_CONFIG));
                 }
-                if (d.first_mes && !useRecoveryAsAuthority && (needSaucepanFallback || !firstMessage || d.first_mes !== firstMessage)) {
+                if (d.first_mes && (!firstMessage || d.first_mes !== firstMessage)) {
                     const fs = document.getElementById('datacatCharFirstMsgSection');
                     const fe = document.getElementById('datacatCharFirstMsg');
                     if (fs) fs.style.display = 'block';
@@ -3314,7 +2834,7 @@ function initDatacatView() {
                     const charId = card?.dataset?.datacatId;
                     const hit = charId ? datacatCharacters.find(c => String(getCharId(c)) === charId) : null;
                     if (hit && getSourceKind(hit) === 'saucepan') {
-                        browseCreator(creatorId, { source: 'saucepan', handle: getCreatorName(hit), name: getCreatorName(hit) });
+                        delegateSaucepanCreator(hit);
                     } else {
                         browseCreator(creatorId);
                     }
@@ -3328,9 +2848,8 @@ function initDatacatView() {
             if (!charId) return;
             const hit = datacatCharacters.find(c => String(getCharId(c)) === charId);
             if (!hit) return;
-            // Saucepan and DataCat hits both go through the preview modal.
-            // For saucepan items not yet on DataCat, fetchAndPopulateDetails
-            // will surface the inline extraction CTA when the lookup fails.
+            // Saucepan aggregate rows delegate at the preview boundary; DataCat
+            // still renders the card and source badge but never owns its actions.
             openPreviewModal(hit);
         });
     }
@@ -3371,11 +2890,6 @@ function initDatacatView() {
             datacatCurrentOffset = 0;
             loadCharacters(false);
         }
-        if (isSaucepanSortMode(datacatSortMode) && saucepanSearchQuery) {
-            saucepanSearchQuery = '';
-            saucepanCurrentPage = 1;
-            loadCharacters(false);
-        }
     });
 
     // Load More
@@ -3386,8 +2900,6 @@ function initDatacatView() {
             hampterCurrentPage++;
         } else if (isJannySortMode(datacatSortMode)) {
             meiliCurrentPage++;
-        } else if (isSaucepanSortMode(datacatSortMode)) {
-            saucepanCurrentPage++;
         } else {
             const loadParsed = parseSortMode(datacatSortMode);
             if (loadParsed) {
@@ -3418,17 +2930,6 @@ function initDatacatView() {
     });
     updateNsfwToggle();
 
-    // Open-Definition toggle (Saucepan)
-    on('datacatOpenDefToggle', 'click', () => {
-        saucepanOpenDefinitionOnly = !saucepanOpenDefinitionOnly;
-        updateOpenDefToggle();
-        if (isSaucepanSortMode(datacatSortMode)) {
-            saucepanCurrentPage = 1;
-            loadCharacters(false);
-        }
-    });
-    updateOpenDefToggle();
-    updateOpenDefToggleVisibility();
     updateSourceFilterVisibility();
 
     // Filters dropdown toggle
@@ -3479,8 +2980,6 @@ function initDatacatView() {
             meiliCurrentPage = 1;
             hampterCurrentPage = 1;
             hampterSearchQuery = '';
-            saucepanCurrentPage = 1;
-            saucepanSearchQuery = '';
         }
         datacatCurrentOffset = 0;
         updateSearchPlaceholder();
@@ -3490,10 +2989,8 @@ function initDatacatView() {
         const tagDropdown = document.getElementById('datacatTagsDropdown');
         if (tagDropdown && !tagDropdown.classList.contains('hidden')) {
             if (isJannyTagMode()) renderJannyTagsList();
-            else if (isSaucepanTagMode()) renderSaucepanTagsList();
             else loadFacetedTags();
         }
-        updateOpenDefToggleVisibility();
         updateSourceFilterVisibility();
         loadCharacters(false);
     });
@@ -3537,8 +3034,6 @@ function initDatacatView() {
             if (searchInput) searchInput.value = '';
             if (isJannyTagMode()) {
                 renderJannyTagsList();
-            } else if (isSaucepanTagMode()) {
-                renderSaucepanTagsList();
             } else {
                 loadFacetedTags();
             }
@@ -3552,11 +3047,6 @@ function initDatacatView() {
         if (isJannyTagMode()) {
             jannyActiveTagIds.clear();
             renderJannyTagsList();
-        } else if (isSaucepanTagMode()) {
-            saucepanActiveTags.clear();
-            saucepanExcludedTags.clear();
-            renderSaucepanTagsList();
-            saucepanCurrentPage = 1;
         } else {
             datacatActiveTagIds.clear();
             renderTagsList();
@@ -3573,8 +3063,6 @@ function initDatacatView() {
         const filter = searchInput?.value || '';
         if (isJannyTagMode()) {
             renderJannyTagsList(filter);
-        } else if (isSaucepanTagMode()) {
-            renderSaucepanTagsList(filter);
         } else {
             renderTagsList(filter);
         }
@@ -3600,11 +3088,10 @@ function initDatacatView() {
     // Follow button in creator banner
     on('datacatFollowCreatorBtn', 'click', () => {
         if (!datacatCreatorId) return;
-        const src = datacatCreatorSource;
-        if (isCreatorFollowed(datacatCreatorId, src)) {
-            unfollowCreator(datacatCreatorId, src);
+        if (isCreatorFollowed(datacatCreatorId)) {
+            unfollowCreator(datacatCreatorId);
         } else {
-            followCreator(datacatCreatorId, datacatCreatorName, src);
+            followCreator(datacatCreatorId, datacatCreatorName);
         }
     });
 
@@ -3657,12 +3144,7 @@ function ensureModalEventsAttached() {
             const creatorId = getCreatorId(datacatSelectedChar);
             if (creatorId) {
                 closePreviewModal();
-                if (datacatSelectedChar && getSourceKind(datacatSelectedChar) === 'saucepan') {
-                    const handle = getCreatorName(datacatSelectedChar);
-                    browseCreator(creatorId, { source: 'saucepan', handle, name: handle });
-                } else {
-                    browseCreator(creatorId);
-                }
+                browseCreator(creatorId);
             }
         });
     }
@@ -3743,20 +3225,16 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
         return datacatFollowedCreators.map((c, i) => ({
             id: c.id,
             name: c.name,
-            source: c.source || 'datacat',
-            handle: (c.source === 'saucepan') ? c.name : undefined,
+            source: 'datacat',
             followedAt: i,
         }));
     }
 
     _renderManagerCreatorCard(creator, index) {
         const html = super._renderManagerCreatorCard(creator, index);
-        const source = creator.source || 'datacat';
         // DataCat-tracked creators are JanitorAI creators (DataCat indexes JanitorAI),
         // so display them with the Janitor badge for consistency with the timeline.
-        const badge = source === 'saucepan'
-            ? '<span class="browse-feature-badge source-saucepan" title="Source: Saucepan">S</span>'
-            : '<span class="browse-feature-badge source-janitor" title="Source: JanitorAI">J</span>';
+        const badge = '<span class="browse-feature-badge source-janitor" title="Source: JanitorAI">J</span>';
         // Inject the source badge inside the meta line, before the existing meta children.
         return html.replace(
             '<div class="follow-mgr-card-meta">',
@@ -3767,39 +3245,6 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
     async followCreator(query) {
         if (!query) return null;
         const raw = query.trim();
-
-        // Saucepan URL or @handle pattern
-        const saucepanUrlMatch = raw.match(/saucepan\.ai\/@?([A-Za-z0-9_.-]+)/i);
-        const atHandleMatch = raw.match(/^@([A-Za-z0-9_.-]+)$/);
-        if (saucepanUrlMatch || atHandleMatch) {
-            const handle = (saucepanUrlMatch?.[1] || atHandleMatch?.[1] || '').trim();
-            if (!handle) return null;
-            // Saucepan stores handle as both display name and lookup key; id = author_id
-            // Try fetching to resolve author_id
-            try {
-                const data = await fetchSaucepanCompanionsOfUser(handle);
-                const list = data?.characters || [];
-                if (list.length === 0) {
-                    showToast(`Saucepan creator "${handle}" not found or has no characters`, 'warning');
-                    return null;
-                }
-                const authorId = list[0]?.creator_id;
-                if (!authorId) {
-                    showToast('Could not resolve Saucepan creator id', 'warning');
-                    return null;
-                }
-                if (isCreatorFollowed(authorId, 'saucepan')) {
-                    showToast('Already following this creator', 'info');
-                    return null;
-                }
-                followCreator(authorId, handle, 'saucepan');
-                return { id: authorId, name: handle };
-            } catch (e) {
-                debugLog('[DatacatFollowing] Saucepan follow lookup failed:', e.message);
-                showToast('Failed to look up Saucepan creator', 'error');
-                return null;
-            }
-        }
 
         let creatorId = raw;
 
@@ -3825,9 +3270,9 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
         // Client-side name search across known data
         const lowerQ = raw.toLowerCase();
         const sources = [
-            ...datacatFollowedCreators.map(c => ({ id: c.id, name: c.name, source: c.source || 'datacat' })),
-            ...datacatCharacters.map(c => ({ id: getCreatorId(c), name: getCreatorName(c), source: getSourceKind(c) === 'saucepan' ? 'saucepan' : 'datacat' })),
-            ...datacatFollowingCharacters.map(c => ({ id: getCreatorId(c), name: getCreatorName(c), source: getSourceKind(c) === 'saucepan' ? 'saucepan' : 'datacat' })),
+            ...datacatFollowedCreators.map(c => ({ id: c.id, name: c.name, source: 'datacat' })),
+            ...datacatCharacters.filter(c => getSourceKind(c) !== 'saucepan').map(c => ({ id: getCreatorId(c), name: getCreatorName(c), source: 'datacat' })),
+            ...datacatFollowingCharacters.filter(c => getSourceKind(c) !== 'saucepan').map(c => ({ id: getCreatorId(c), name: getCreatorName(c), source: 'datacat' })),
         ];
         const exact = sources.find(c => c.name?.toLowerCase() === lowerQ);
         const match = exact || sources.find(c => c.name?.toLowerCase().includes(lowerQ));
@@ -3837,7 +3282,7 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
             return { id: match.id, name: match.name };
         }
 
-        showToast('Creator not found. Try pasting a DataCat or Saucepan creator URL.', 'warning');
+        showToast('Creator not found. Try pasting a DataCat creator URL.', 'warning');
         return null;
     }
 
@@ -3850,12 +3295,7 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
     browseCreatorFromManager(creator) {
         switchDatacatViewMode('browse');
         _returnToFollowing = true;
-        const source = creator.source || 'datacat';
-        if (source === 'saucepan') {
-            browseCreator(creator.id, { source: 'saucepan', handle: creator.handle || creator.name, name: creator.name });
-        } else {
-            browseCreator(creator.id);
-        }
+        browseCreator(creator.id);
     }
 
     getFollowingManagerSortOptions() {
@@ -3980,11 +3420,6 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
             <!-- NSFW toggle -->
             <button id="datacatNsfwToggle" class="glass-btn nsfw-toggle" title="Toggle NSFW content">
                 <i class="fa-solid fa-shield-halved"></i> <span>SFW Only</span>
-            </button>
-
-            <!-- Open-Definition toggle (Saucepan only) -->
-            <button id="datacatOpenDefToggle" class="glass-btn active" title="Showing only open-definition characters" style="display: none;">
-                <i class="fa-solid fa-lock-open"></i> <span>Open Defs</span>
             </button>
 
             <!-- Refresh -->
@@ -4237,8 +3672,6 @@ const datacatBrowseView = new (class DatacatBrowseView extends BrowseView {
             hampterCurrentPage++;
         } else if (isJannySortMode(datacatSortMode)) {
             meiliCurrentPage++;
-        } else if (isSaucepanSortMode(datacatSortMode)) {
-            saucepanCurrentPage++;
         } else {
             const parsed = parseSortMode(datacatSortMode);
             if (parsed) {

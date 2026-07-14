@@ -58,6 +58,10 @@ export function switchView(view) {
     window.switchView?.(view);
 }
 
+export function activateOnlineProvider(providerId) {
+    return window.activateOnlineProvider?.(providerId);
+}
+
 /**
  * Get current active view
  * @returns {string} 'characters' | 'chats' | 'online'
@@ -1309,6 +1313,7 @@ export default {
 
     // View management
     switchView,
+    activateOnlineProvider,
     getCurrentView,
     onViewEnter,
     onViewExit,

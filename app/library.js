@@ -611,6 +611,7 @@ const DEFAULT_SETTINGS = {
     wyvernNsfw: false,
     ctNsfw: false,
     datacatNsfw: false,
+    saucepanNsfw: false,
 
     // ---- Search & Sort ----
     defaultSort: 'name_asc',
@@ -688,11 +689,13 @@ const DEFAULT_SETTINGS = {
     // ---- Provider Config ----
     chubUseV4Api: false,
     providerOrder: null,
-    providerDefaults: {},
-    infiniteScroll: {},
+    providerDefaults: { saucepan: { view: 'browse', sort: 'saucepan_new', hideOwned: false, hidePossible: false } },
+    infiniteScroll: { saucepan: true },
     disabledProviders: ['datacat', 'botbooru'],
     datacatFollowedCreators: [],
-    providerExcludeTags: {},
+    saucepanFollowedCreators: [],
+    saucepanOpenDefinitionOnly: true,
+    providerExcludeTags: { saucepan: [] },
 
     // ---- Versions ----
     autoSnapshotOnEdit: true,
@@ -1233,23 +1236,103 @@ async function loadGallerySettings() {
 // ============================================================
 
 function migrateSettings() {
+    let changed = false;
+
     if (gallerySettings.includeChubGallery !== undefined) {
         gallerySettings.includeProviderGallery = gallerySettings.includeChubGallery;
         delete gallerySettings.includeChubGallery;
-        saveGallerySettings();
+        changed = true;
     }
     if ('showChubTagline' in gallerySettings) {
         gallerySettings.showProviderTagline = gallerySettings.showChubTagline;
         delete gallerySettings.showChubTagline;
-        saveGallerySettings();
+        changed = true;
     }
     // not in DEFAULT_SETTINGS anymore, so presence here means a real saved value (existing install)
     if ('notifyAdditionalContent' in gallerySettings || 'backgroundMediaLocalization' in gallerySettings) {
         gallerySettings.importMediaAction = gallerySettings.notifyAdditionalContent === false ? 'none' : 'background';
         delete gallerySettings.notifyAdditionalContent;
         delete gallerySettings.backgroundMediaLocalization;
-        saveGallerySettings();
+        changed = true;
     }
+
+    const datacatFollows = Array.isArray(gallerySettings.datacatFollowedCreators)
+        ? gallerySettings.datacatFollowedCreators
+        : [];
+    const saucepanFollows = Array.isArray(gallerySettings.saucepanFollowedCreators)
+        ? [...gallerySettings.saucepanFollowedCreators]
+        : [];
+    const normalizedName = creator => String(creator?.name || creator?.handle || '').trim().toLowerCase();
+    const isDuplicateSaucepanFollow = creator => saucepanFollows.some(existing => {
+        const creatorId = String(creator?.id || '').trim();
+        const existingId = String(existing?.id || '').trim();
+        const creatorName = normalizedName(creator);
+        const existingName = normalizedName(existing);
+        return (creatorId && existingId && creatorId === existingId)
+            || (creatorName && existingName && creatorName === existingName);
+    });
+    const retainedDatacatFollows = [];
+    let migratedFollows = false;
+    for (const creator of datacatFollows) {
+        if (creator?.source !== 'saucepan') {
+            retainedDatacatFollows.push(creator);
+            continue;
+        }
+        if (!isDuplicateSaucepanFollow(creator)) saucepanFollows.push(creator);
+        migratedFollows = true;
+    }
+    if (migratedFollows) {
+        gallerySettings.datacatFollowedCreators = retainedDatacatFollows;
+        gallerySettings.saucepanFollowedCreators = saucepanFollows;
+        changed = true;
+    }
+
+    if (Array.isArray(gallerySettings.providerOrder) && gallerySettings.providerOrder.includes('datacat') && !gallerySettings.providerOrder.includes('saucepan')) {
+        const datacatIndex = gallerySettings.providerOrder.indexOf('datacat');
+        gallerySettings.providerOrder.splice(datacatIndex + 1, 0, 'saucepan');
+        changed = true;
+    }
+
+    const providerDefaults = { ...(gallerySettings.providerDefaults || {}) };
+    const datacatDefaults = providerDefaults.datacat && typeof providerDefaults.datacat === 'object'
+        ? { ...providerDefaults.datacat }
+        : {};
+    const hadSaucepanDefaults = providerDefaults.saucepan && typeof providerDefaults.saucepan === 'object';
+    const saucepanDefaults = hadSaucepanDefaults ? { ...providerDefaults.saucepan } : {};
+    if (!hadSaucepanDefaults) {
+        if ('hideOwned' in datacatDefaults) saucepanDefaults.hideOwned = datacatDefaults.hideOwned;
+        if ('hidePossible' in datacatDefaults) saucepanDefaults.hidePossible = datacatDefaults.hidePossible;
+    }
+    const saucepanSort = /^saucepan_(new|trending|popular)$/.exec(datacatDefaults.sort || '');
+    if (saucepanSort) {
+        if (!('sort' in saucepanDefaults)) saucepanDefaults.sort = saucepanSort[1];
+        delete datacatDefaults.sort;
+        if (Object.keys(datacatDefaults).length > 0) providerDefaults.datacat = datacatDefaults;
+        else delete providerDefaults.datacat;
+    }
+    if (!hadSaucepanDefaults || saucepanSort) {
+        providerDefaults.saucepan = saucepanDefaults;
+        gallerySettings.providerDefaults = providerDefaults;
+        changed = true;
+    }
+
+    const infiniteScroll = { ...(gallerySettings.infiniteScroll || {}) };
+    if (!Object.hasOwn(infiniteScroll, 'saucepan')) {
+        infiniteScroll.saucepan = true;
+        gallerySettings.infiniteScroll = infiniteScroll;
+        changed = true;
+    }
+
+    const providerExcludeTags = { ...(gallerySettings.providerExcludeTags || {}) };
+    if (!Object.hasOwn(providerExcludeTags, 'saucepan')) {
+        providerExcludeTags.saucepan = Array.isArray(providerExcludeTags.datacat)
+            ? [...providerExcludeTags.datacat]
+            : [];
+        gallerySettings.providerExcludeTags = providerExcludeTags;
+        changed = true;
+    }
+
+    if (changed) saveGallerySettings();
 }
 
 /**
@@ -1918,10 +2001,6 @@ function setupSettingsModal() {
             const isDisabled = disabledProviders.has(provider.id);
             if (isDisabled) item.classList.add('provider-disabled');
 
-            const hideToggles = `
-                <label class="provider-default-hide" title="Hide cards already in your library by default"><input type="checkbox" class="provider-default-hide-owned"${defaults.hideOwned ? ' checked' : ''}>Hide Owned</label>
-                <label class="provider-default-hide" title="Hide possible-match cards by default"><input type="checkbox" class="provider-default-hide-possible"${defaults.hidePossible ? ' checked' : ''}>Hide Possible</label>`;
-
             item.innerHTML = `
                 <i class="fa-solid fa-grip-vertical drag-handle"></i>
                 <button type="button" class="provider-toggle-btn${isDisabled ? ' disabled' : ''}" data-provider="${provider.id}" title="${isDisabled ? 'Enable' : 'Disable'} in Online tab">
@@ -1932,7 +2011,7 @@ function setupSettingsModal() {
                 ${provider.beta ? '<span class="provider-beta-badge">Beta</span>' : ''}
                 <span class="provider-order-badge">Default</span>
                 <div class="provider-order-defaults">
-                    ${viewSelect}${sortSelect}${hideToggles}
+                    ${viewSelect}${sortSelect}
                 </div>
             `;
 
@@ -2037,6 +2116,30 @@ function setupSettingsModal() {
         });
     }
 
+    function buildProviderHideDefaultsUI() {
+        const container = document.getElementById('providerHideDefaultsList');
+        if (!container) return;
+
+        const registry = window.ProviderRegistry;
+        if (!registry) return;
+        const viewProviders = registry.getAllProviders().filter(p => p.hasView);
+        const savedDefaults = getSetting('providerDefaults') || {};
+
+        container.innerHTML = '';
+        for (const provider of viewProviders) {
+            const defaults = savedDefaults[provider.id] || {};
+            const row = document.createElement('div');
+            row.className = 'provider-hide-defaults-row';
+            row.dataset.providerId = provider.id;
+            row.innerHTML = `
+                <i class="fa-solid ${provider.icon || 'fa-globe'} provider-order-icon"></i>
+                <span class="provider-order-name">${provider.name}</span>
+                <label class="provider-default-hide" title="Hide cards already in your library by default"><input type="checkbox" class="provider-default-hide-owned"${defaults.hideOwned ? ' checked' : ''}>Hide Owned</label>
+                <label class="provider-default-hide" title="Hide possible-match cards by default"><input type="checkbox" class="provider-default-hide-possible"${defaults.hidePossible ? ' checked' : ''}>Hide Possible</label>`;
+            container.appendChild(row);
+        }
+    }
+
     function readProviderOrderFromUI() {
         const container = document.getElementById('providerOrderList');
         if (!container) return { providerOrder: null, providerDefaults: {}, disabledProviders: [] };
@@ -2060,17 +2163,30 @@ function setupSettingsModal() {
             const sortSel = item.querySelector('.provider-default-sort');
             const viewVal = viewSel?.value || '';
             const sortVal = sortSel?.value || '';
-            const hideOwned = !!item.querySelector('.provider-default-hide-owned')?.checked;
-            const hidePossible = !!item.querySelector('.provider-default-hide-possible')?.checked;
+            const hideOwned = false;
+            const hidePossible = false;
 
-            if (viewVal || sortVal || hideOwned || hidePossible) {
+            if (viewVal || sortVal) {
                 defaults[pid] = {};
                 if (viewVal) defaults[pid].view = viewVal;
                 if (sortVal) defaults[pid].sort = sortVal;
-                if (hideOwned) defaults[pid].hideOwned = true;
-                if (hidePossible) defaults[pid].hidePossible = true;
             }
         });
+
+        const hideDefaultsList = document.getElementById('providerHideDefaultsList');
+        if (hideDefaultsList) {
+            hideDefaultsList.querySelectorAll('.provider-hide-defaults-row').forEach(row => {
+                const pid = row.dataset.providerId;
+                if (!pid) return;
+                const hideOwned = !!row.querySelector('.provider-default-hide-owned')?.checked;
+                const hidePossible = !!row.querySelector('.provider-default-hide-possible')?.checked;
+                if (hideOwned || hidePossible) {
+                    if (!defaults[pid]) defaults[pid] = {};
+                    if (hideOwned) defaults[pid].hideOwned = true;
+                    if (hidePossible) defaults[pid].hidePossible = true;
+                }
+            });
+        }
 
         return { providerOrder: order.length > 0 ? order : null, providerDefaults: defaults, disabledProviders: disabled };
     }
@@ -2125,8 +2241,6 @@ function setupSettingsModal() {
                 <span class="provider-order-badge">Default</span>
                 <div class="provider-order-defaults">
                     ${viewSelect}${sortSelect}
-                    <label class="provider-default-hide" title="Hide cards already in your library by default"><input type="checkbox" class="provider-default-hide-owned">Hide Owned</label>
-                    <label class="provider-default-hide" title="Hide possible-match cards by default"><input type="checkbox" class="provider-default-hide-possible">Hide Possible</label>
                 </div>
             `;
             container.appendChild(item);
@@ -2202,6 +2316,7 @@ function setupSettingsModal() {
         { id: 'chartavern', inputId: 'ctExcludeTagsInput', pillsId: 'ctExcludeTagsPills' },
         { id: 'wyvern', inputId: 'wyvernExcludeTagsInput', pillsId: 'wyvernExcludeTagsPills' },
         { id: 'datacat', inputId: 'datacatExcludeTagsInput', pillsId: 'datacatExcludeTagsPills' },
+        { id: 'saucepan', inputId: 'saucepanExcludeTagsInput', pillsId: 'saucepanExcludeTagsPills' },
         { id: 'botbooru', inputId: 'botbooruExcludeTagsInput', pillsId: 'botbooruExcludeTagsPills' },
     ];
 
@@ -2977,6 +3092,7 @@ function setupSettingsModal() {
 
         // Provider Order & Defaults
         buildProviderOrderUI();
+        buildProviderHideDefaultsUI();
         buildInfiniteScrollUI();
         populateAllExcludeTagPills();
         window.renderBotbooruFavTagPills?.();
@@ -3637,6 +3753,9 @@ function setupSettingsModal() {
         // Provider Order & Defaults - reset to registration order
         resetProviderOrderUI();
 
+        // Provider Hide Defaults - rebuild
+        buildProviderHideDefaultsUI();
+
         // Infinite Scroll - reset all to enabled
         const isContainer = document.getElementById('infiniteScrollToggles');
         if (isContainer) {
@@ -4139,8 +4258,7 @@ function setupSettingsModal() {
     }
 
     // ---- Saucepan Account (native extraction) ----
-    // Token persistence lives in window.saucepanLogin/saucepanSetToken/
-    // saucepanClearSession (datacat-provider.js); handlers here only drive the UI.
+    // Token persistence lives in the Saucepan provider's window API; these handlers only drive the UI.
     if (toggleSaucepanTokenVisibility && saucepanTokenInput) {
         toggleSaucepanTokenVisibility.onclick = () => {
             const isPassword = saucepanTokenInput.type === 'password';
@@ -4278,7 +4396,7 @@ function setupSettingsModal() {
     // ---- JanitorAI Login (session cookie; unlocks Hampter pagination) ----
     // Password login is Turnstile-gated (domain-locked, unsolvable from CL), so the session is
     // seeded from the sb-auth-auth-token cookie and kept alive by the captcha-free refresh grant.
-    // Parse / verify / refresh all live in datacat-provider (window.janitorai*).
+    // Parse / verify / refresh all live in the JanitorAI provider window API.
     const janitoraiTokenInputEl = document.getElementById('settingsJanitoraiToken');
     const toggleJanitoraiTokenBtn = document.getElementById('toggleJanitoraiTokenVisibility');
     const saveJanitoraiTokenBtn = document.getElementById('saveJanitoraiTokenBtn');
@@ -4871,8 +4989,9 @@ function activateOnlineProvider(requestedId) {
     }
 
     lastOnlineProviderId = targetId;
-    registry.activateProvider(targetId, container, filterContent);
+    return registry.activateProvider(targetId, container, filterContent);
 }
+window.activateOnlineProvider = activateOnlineProvider;
 
 /**
  * Switch between top-level views (characters, chats, online).
@@ -20505,6 +20624,9 @@ async function unlinkFromProvider() {
         // Sentinel-delete the provider namespace; migrate display metadata into cl only where cl is empty (dont clobber user values).
         const existingCl = activeChar.data?.extensions?.cl;
         const updates = { [`extensions.${provider.id}`]: ST_UNSET_SENTINEL };
+        for (const namespace of provider.getLegacyLinkNamespaces?.(activeChar) || []) {
+            updates[`extensions.${namespace}`] = ST_UNSET_SENTINEL;
+        }
         if (provTagline && !(existingCl && 'tagline' in existingCl)) {
             updates['extensions.cl.tagline'] = provTagline;
         }
@@ -21561,10 +21683,13 @@ async function saveProviderLink(char, provider, linkInfo) {
         if (c.data?.extensions && 'cl' in c.data.extensions) delete c.data.extensions.cl;
     }
 
-    // Persist via applyCardFieldUpdates; the provider namespace rides the existing-extensions spread, so only the cl-delete is a dot-path update.
-    const success = await window.applyCardFieldUpdates(char.avatar, {
-        'extensions.cl': ST_UNSET_SENTINEL,
-    });
+    // The provider namespace rides the existing-extensions spread. Legacy ownership
+    // namespaces require explicit sentinel deletes so they cannot reclaim the card.
+    const updates = { 'extensions.cl': ST_UNSET_SENTINEL };
+    for (const namespace of provider.getLegacyLinkNamespaces?.(char) || []) {
+        updates[`extensions.${namespace}`] = ST_UNSET_SENTINEL;
+    }
+    const success = await window.applyCardFieldUpdates(char.avatar, updates);
     if (!success) throw new Error('Failed to save provider link');
 
     // Recompute the listing-name + tagline search keys (CL-side state outside char.data; helper doesnt know about it).

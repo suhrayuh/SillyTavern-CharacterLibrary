@@ -8422,6 +8422,8 @@ html:not(.cl-mobile) .settings-row[data-platform="mobile"] { display: none !impo
     border-bottom: none;
     cursor: grab;
     user-select: none;
+    overflow: hidden;
+    min-width: 0;
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
     position: relative;
 }
@@ -8602,6 +8604,62 @@ html:not(.cl-mobile) .settings-row[data-platform="mobile"] { display: none !impo
 .provider-order-item.provider-disabled .provider-order-name {
     text-decoration: line-through;
     text-decoration-color: rgba(255, 255, 255, 0.3);
+}
+
+.provider-hide-defaults-row {
+    display: grid;
+    grid-template-columns: 24px minmax(140px, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: none;
+}
+
+.provider-hide-defaults-row:first-child {
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.provider-hide-defaults-row:last-child {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.provider-hide-defaults-row .provider-order-icon {
+    width: 18px;
+    color: var(--accent);
+    opacity: 0.8;
+    font-size: var(--font-md-lg);
+    text-align: center;
+}
+
+.provider-hide-defaults-row .provider-order-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: var(--font-md);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.provider-hide-defaults-row .provider-default-hide {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 112px;
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.provider-hide-defaults-row .provider-default-hide input {
+    flex: 0 0 auto;
+    margin: 0;
+    cursor: pointer;
 }
 
 .settings-group-title {

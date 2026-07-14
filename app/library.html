@@ -2422,6 +2422,15 @@ https://jannyai.com/characters/uuid_slug
                             </div>
                         </div>
 
+                        <!-- Provider Hide Defaults -->
+                        <div class="settings-group" id="providerHideDefaultsGroup">
+                            <div class="settings-group-title"><i class="fa-solid fa-eye-slash"></i> Provider Hide Defaults</div>
+                            <p class="settings-hint" style="margin-bottom: 12px;">When enabled, the Online tab hides cards matching these filters by default for the selected provider.</p>
+                            <div id="providerHideDefaultsList">
+                                <!-- Populated dynamically by JS -->
+                            </div>
+                        </div>
+
                         <!-- Infinite Scroll -->
                         <div class="settings-group" id="infiniteScrollGroup">
                             <div class="settings-group-title"><i class="fa-solid fa-arrow-down-wide-short"></i> Infinite Scroll</div>
@@ -2766,9 +2775,28 @@ https://jannyai.com/characters/uuid_slug
                                     </div>
                                 </div>
                                 <div class="settings-group">
-                                    <div class="settings-group-title"><i class="fa-solid fa-bowl-food"></i> Saucepan Account</div>
+                                    <div class="settings-group-title"><i class="fa-solid fa-ban"></i> Exclude Tags <i class="fa-solid fa-circle-info datacat-exclude-info" title="Client-side filter, case-insensitive on tag slugs (eg. female, nsfw).&#10;&#10;DataCat's default unsorted view returns no tag data, so excludes have no effect there; switch to any sort to enable filtering."></i></div>
                                     <div class="settings-row">
-                                        <span class="settings-hint">Optional. A Saucepan login (or a pasted Bearer token) enables native extraction of open-definition Saucepan characters, without waiting on DataCat's extraction service.</span>
+                                        <div class="provider-exclude-tags-container">
+                                            <div class="provider-exclude-tags-pills" id="datacatExcludeTagsPills"></div>
+                                            <input type="text" class="glass-input provider-exclude-tags-input" id="datacatExcludeTagsInput" placeholder="Type a tag and press Enter" autocomplete="off">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+
+                        <!-- Saucepan provider settings -->
+                        <details class="settings-provider-section" id="settingsSaucepanSection">
+                            <summary>
+                                <i class="fa-solid fa-bowl-food provider-icon"></i> Saucepan
+                                <i class="fa-solid fa-chevron-right provider-chevron"></i>
+                            </summary>
+                            <div class="settings-provider-body">
+                                <div class="settings-group">
+                                    <div class="settings-group-title"><i class="fa-solid fa-key"></i> Account</div>
+                                    <div class="settings-row">
+                                        <span class="settings-hint">Optional. A Saucepan login (or a pasted Bearer token) enables native extraction of open-definition Saucepan characters.</span>
                                     </div>
                                     <div class="settings-row">
                                         <label>Handle:</label>
@@ -2808,12 +2836,13 @@ https://jannyai.com/characters/uuid_slug
                                     </div>
                                 </div>
                                 <div class="settings-group">
-                                    <div class="settings-group-title"><i class="fa-solid fa-ban"></i> Exclude Tags <i class="fa-solid fa-circle-info datacat-exclude-info" title="Client-side filter, case-insensitive on tag slugs (eg. female, nsfw).&#10;&#10;DataCat's default unsorted view returns no tag data, so excludes have no effect there; switch to any sort (Fresh, Saucepan, JanitorAI) to enable filtering.&#10;&#10;Saucepan mode additionally enforces excludes server-side."></i></div>
+                                    <div class="settings-group-title"><i class="fa-solid fa-ban"></i> Exclude Tags</div>
                                     <div class="settings-row">
                                         <div class="provider-exclude-tags-container">
-                                            <div class="provider-exclude-tags-pills" id="datacatExcludeTagsPills"></div>
-                                            <input type="text" class="glass-input provider-exclude-tags-input" id="datacatExcludeTagsInput" placeholder="Type a tag and press Enter" autocomplete="off">
+                                            <div class="provider-exclude-tags-pills" id="saucepanExcludeTagsPills"></div>
+                                            <input type="text" class="glass-input provider-exclude-tags-input" id="saucepanExcludeTagsInput" placeholder="Type a tag and press Enter" autocomplete="off">
                                         </div>
+                                        <span class="settings-hint">Tags entered here are always excluded from Saucepan browse results.</span>
                                     </div>
                                 </div>
                             </div>

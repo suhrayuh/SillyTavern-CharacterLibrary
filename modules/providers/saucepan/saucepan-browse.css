@@ -1,0 +1,234 @@
+/* Dedicated Saucepan browse surface. Shared browse primitives remain in browse-shared.css. */
+
+.saucepan-view-toggle {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--glass-border);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent);
+    box-shadow: 3px 3px 0 color-mix(in srgb, #f14da6 35%, transparent);
+}
+
+.saucepan-view-btn {
+    min-height: 34px;
+    padding: 5px 11px;
+    border: 0;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+}
+
+.saucepan-view-btn.active {
+    color: #fff;
+    background: color-mix(in srgb, #f14da6 68%, #24132d);
+    text-shadow: 0 0 8px rgba(255, 119, 195, 0.7);
+}
+
+.saucepan-dropdown-wrap {
+    position: relative;
+}
+
+#saucepanTagsDropdown,
+#saucepanFiltersDropdown {
+    border-color: color-mix(in srgb, #d4abd4 55%, var(--glass-border));
+    box-shadow: 5px 5px 0 rgba(14, 5, 19, 0.75), 0 0 18px rgba(241, 77, 166, 0.16);
+}
+
+#saucepanFiltersDropdown {
+    width: 250px;
+}
+
+#saucepanTagsList .state-include {
+    color: #101015;
+    background: #d4abd4;
+}
+
+#saucepanTagsList .state-exclude {
+    color: #fff;
+    background: #c23968;
+}
+
+.saucepan-section .browse-card {
+    border-color: color-mix(in srgb, #d4abd4 24%, var(--glass-border));
+}
+
+.saucepan-section .browse-card:hover {
+    border-color: #f14da6;
+    box-shadow: 4px 4px 0 rgba(241, 77, 166, 0.42), 0 0 18px rgba(212, 171, 212, 0.16);
+}
+
+.saucepan-creator-link {
+    display: block;
+    max-width: 100%;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    color: #d4abd4;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.saucepan-creator-link:hover {
+    color: #f14da6;
+}
+
+.saucepan-timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid color-mix(in srgb, #d4abd4 30%, transparent);
+}
+
+.saucepan-timeline-header h3,
+.saucepan-timeline-header p {
+    margin: 0;
+}
+
+.saucepan-timeline-header p {
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+}
+
+.saucepan-empty {
+    grid-column: 1 / -1;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    padding: 48px 20px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.saucepan-empty > i {
+    color: #d4abd4;
+    font-size: 2rem;
+    filter: drop-shadow(0 0 7px rgba(241, 77, 166, 0.4));
+}
+
+.saucepan-char-modal .modal-header {
+    border-bottom-color: color-mix(in srgb, #f14da6 42%, var(--glass-border));
+}
+
+.saucepan-provenance {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 12px;
+}
+
+.saucepan-provenance-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 27px;
+    padding: 4px 8px;
+    border: 1px solid var(--glass-border);
+    background: rgba(12, 8, 17, 0.5);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.saucepan-provenance-chip.ready,
+.saucepan-provenance-chip.open {
+    border-color: rgba(124, 218, 175, 0.5);
+    color: #a5e8c8;
+}
+
+.saucepan-provenance-chip.locked {
+    border-color: rgba(241, 77, 166, 0.65);
+    color: #ff9dcc;
+}
+
+.saucepan-provenance-chip.error {
+    border-color: rgba(231, 91, 112, 0.65);
+    color: #ff9cac;
+}
+
+.saucepan-provenance-detail {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.saucepan-locked-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-left: 3px solid #f14da6;
+    background: rgba(241, 77, 166, 0.08);
+    color: #ff9dcc;
+    font-size: 0.82rem;
+}
+
+.saucepan-locked-banner i {
+    font-size: 1rem;
+}
+
+.saucepan-lorebooks-list {
+    display: grid;
+    gap: 7px;
+}
+
+.saucepan-lorebook-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 9px;
+    border-left: 3px solid #d4abd4;
+    background: rgba(212, 171, 212, 0.07);
+}
+
+.saucepan-lorebook-row > i {
+    margin-top: 2px;
+    color: #f14da6;
+}
+
+.saucepan-lorebook-row strong,
+.saucepan-lorebook-row span {
+    display: block;
+}
+
+.saucepan-lorebook-row span {
+    margin-top: 2px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+#saucepanCharGallery .browse-gallery-cell {
+    padding: 0;
+    border: 1px solid color-mix(in srgb, #d4abd4 36%, var(--glass-border));
+    background: #120b17;
+    cursor: zoom-in;
+}
+
+@media (max-width: 700px) {
+    .saucepan-view-toggle {
+        width: 100%;
+    }
+
+    .saucepan-view-btn {
+        flex: 1;
+    }
+
+    .saucepan-timeline-header {
+        align-items: flex-start;
+    }
+
+    .saucepan-provenance {
+        align-items: stretch;
+    }
+
+    .saucepan-provenance-chip {
+        justify-content: center;
+    }
+}
