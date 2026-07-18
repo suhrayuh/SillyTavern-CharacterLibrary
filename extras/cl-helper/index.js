@@ -1646,6 +1646,8 @@ const SAUCEPAN_ALLOWED_PATHS = [
     /^\/api\/v1\/companion$/,
     /^\/api\/v1\/companion\/definition$/,
     /^\/api\/v1\/companions\/[^/]+\/lorebooks$/,
+    /^\/api\/v2\/companions\/[^/]+$/,
+    /^\/api\/v2\/companions\/[^/]+\/lorebooks$/,
     /^\/api\/v2\/lorebooks\/[^/]+\/chapters$/,
     /^\/api\/v2\/lorebooks\/[^/]+\/chapters\/[^/]+$/,
     /^\/cdn\/.+$/,
@@ -2036,7 +2038,7 @@ function registerSaucepanRoutes(router) {
         try {
             // 1. Fetch linked lorebooks list
             const lbRes = await fetchSaucepanJson(
-                `/api/v1/companions/${encodeURIComponent(companionId)}/lorebooks`,
+                `/api/v2/companions/${encodeURIComponent(companionId)}/lorebooks`,
                 token,
                 companionId,
             );
@@ -2375,6 +2377,160 @@ export async function init(router) {
         }
     });
 
+// FlareSolverr: thin POST forwarder for Cloudflare-protected endpoints
+// =============================================================================
+//
+// FlareSolverr (https://github.com/FlareSolverr/FlareSolverr) is a user-run
+// service that uses a real Chromium instance to bypass Cloudflare bot
+// challenges. It does not emit CORS headers by default, so the browser
+// cannot call it directly - we forward the request through here.
+//
+// This route is a stateless thin POST forwarder. The caller supplies both
+// the FlareSolverr endpoint URL and the target URL. We do not store the
+// FlareSolverr URL server-side; it is always provided per-request.
+
+const FLARESOLVERR_MAX_TARGET_LENGTH = 1024;
+const FLARESOLVERR_TIMEOUT_MS = 90_000;
+
+// Allowlist of upstreams FlareSolverr is allowed to fetch on behalf of CL.
+// Matches the hostname-plus-path-regex pattern used by other cl-helper proxies.
+const FLARESOLVERR_TARGET_ALLOWLIST = [
+    { hostname: 'janitorai.com', pathPattern: /^\/hampter\/characters\/?$/ },
+];
+
+function validateFlareTargetUrl(url) {
+    let parsed;
+    try { parsed = new URL(url); } catch { return false; }
+    if (!/^https?:$/.test(parsed.protocol)) return false;
+    return FLARESOLVERR_TARGET_ALLOWLIST.some(({ hostname, pathPattern }) =>
+        parsed.hostname === hostname && pathPattern.test(parsed.pathname)
+    );
+}
+
+function validateFlareUrl(flareUrl) {
+    if (!flareUrl || typeof flareUrl !== 'string' || flareUrl.length > 256) {
+        return { error: 'flareUrl is required' };
+    }
+    let parsed;
+    try { parsed = new URL(flareUrl); } catch { return { error: 'Invalid flareUrl' }; }
+    if (!/^https?:$/.test(parsed.protocol)) {
+        return { error: 'flareUrl must be http or https' };
+    }
+    return { url: parsed.toString() };
+}
+
+async function postToFlareSolverr(flareUrl, body) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FLARESOLVERR_TIMEOUT_MS + 5000);
+    try {
+        const response = await fetch(flareUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const data = await response.json().catch(() => null);
+        return { response, data };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function registerFlareSolverrRoutes(router) {
+    router.post('/flaresolverr-fetch', async (req, res) => {
+        const { flareUrl, targetUrl, sessionId } = req.body ?? {};
+
+        const flareCheck = validateFlareUrl(flareUrl);
+        if (flareCheck.error) return res.status(400).json({ error: flareCheck.error });
+
+        if (!targetUrl || typeof targetUrl !== 'string') {
+            return res.status(400).json({ error: 'targetUrl is required' });
+        }
+        if (targetUrl.length > FLARESOLVERR_MAX_TARGET_LENGTH) {
+            return res.status(400).json({ error: 'targetUrl too long' });
+        }
+        if (!validateFlareTargetUrl(targetUrl)) {
+            return res.status(403).json({ error: 'targetUrl not in allowlist' });
+        }
+
+        const body = {
+            cmd: 'request.get',
+            url: targetUrl,
+            maxTimeout: FLARESOLVERR_TIMEOUT_MS,
+        };
+        if (sessionId && typeof sessionId === 'string' && sessionId.length <= 128) {
+            body.session = sessionId;
+        }
+
+        try {
+            const { response, data } = await postToFlareSolverr(flareCheck.url, body);
+            if (!data) {
+                return res.status(502).json({ error: 'FlareSolverr returned non-JSON response' });
+            }
+            res.status(response.ok ? 200 : 502).json(data);
+        } catch (err) {
+            console.error('[cl-helper] FlareSolverr forward error:', err.message);
+            const message = err.name === 'AbortError'
+                ? 'FlareSolverr timed out'
+                : `Failed to reach FlareSolverr: ${err.message}`;
+            res.status(502).json({ error: message });
+        }
+    });
+
+    router.post('/flaresolverr-session-create', async (req, res) => {
+        const { flareUrl, sessionId } = req.body ?? {};
+        const flareCheck = validateFlareUrl(flareUrl);
+        if (flareCheck.error) return res.status(400).json({ error: flareCheck.error });
+
+        const body = { cmd: 'sessions.create' };
+        if (sessionId && typeof sessionId === 'string' && sessionId.length <= 128) {
+            body.session = sessionId;
+        }
+
+        try {
+            const { response, data } = await postToFlareSolverr(flareCheck.url, body);
+            if (!data) {
+                return res.status(502).json({ error: 'FlareSolverr returned non-JSON response' });
+            }
+            res.status(response.ok ? 200 : 502).json(data);
+        } catch (err) {
+            console.error('[cl-helper] FlareSolverr session-create error:', err.message);
+            const message = err.name === 'AbortError'
+                ? 'FlareSolverr timed out'
+                : `Failed to reach FlareSolverr: ${err.message}`;
+            res.status(502).json({ error: message });
+        }
+    });
+
+    router.post('/flaresolverr-session-destroy', async (req, res) => {
+        const { flareUrl, sessionId } = req.body ?? {};
+        const flareCheck = validateFlareUrl(flareUrl);
+        if (flareCheck.error) return res.status(400).json({ error: flareCheck.error });
+
+        if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 128) {
+            return res.status(400).json({ error: 'sessionId is required' });
+        }
+
+        try {
+            const { response, data } = await postToFlareSolverr(flareCheck.url, {
+                cmd: 'sessions.destroy',
+                session: sessionId,
+            });
+            if (!data) {
+                return res.status(502).json({ error: 'FlareSolverr returned non-JSON response' });
+            }
+            res.status(response.ok ? 200 : 502).json(data);
+        } catch (err) {
+            console.error('[cl-helper] FlareSolverr session-destroy error:', err.message);
+            const message = err.name === 'AbortError'
+                ? 'FlareSolverr timed out'
+                : `Failed to reach FlareSolverr: ${err.message}`;
+            res.status(502).json({ error: message });
+        }
+    });
+}
+
     registerThumbnailRoutes(router);
     registerPygmalionRoutes(router);
     registerBotbooruRoutes(router);
@@ -2384,6 +2540,7 @@ export async function init(router) {
     registerCivitaiRoutes(router);
     registerPixivRoutes(router);
     registerSaucepanRoutes(router);
+    registerFlareSolverrRoutes(router);
     registerDropboxRoutes(router);
 
     console.log('[cl-helper] Character Library helper plugin loaded');

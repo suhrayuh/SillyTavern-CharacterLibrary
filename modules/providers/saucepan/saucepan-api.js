@@ -166,7 +166,7 @@ function normalizeSaucepanHit(hit) {
 export async function fetchSaucepanLorebookList(companionId) {
     if (!companionId) return [];
     try {
-        const response = await saucepanFetch('GET', `/api/v1/companions/${encodeURIComponent(companionId)}/lorebooks`);
+        const response = await saucepanFetch('GET', `/api/v2/companions/${encodeURIComponent(companionId)}/lorebooks`);
         if (!response.ok) return [];
         const data = await response.json();
         const lorebooks = Array.isArray(data?.lorebooks) ? data.lorebooks : [];
@@ -194,7 +194,7 @@ export async function fetchSaucepanLorebookList(companionId) {
 export async function fetchSaucepanCompanion(id) {
     if (!id) return null;
     try {
-        const response = await saucepanFetch('GET', `/api/v1/companion?id=${encodeURIComponent(id)}`);
+        const response = await saucepanFetch('GET', `/api/v2/companions/${encodeURIComponent(id)}`);
         if (!response.ok) return null;
         const data = await response.json();
         return data?.companion || null;

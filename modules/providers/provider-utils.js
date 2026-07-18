@@ -136,7 +136,12 @@ export function deferCall(el, run) {
 // NETWORK
 // ========================================
 
-const _proxyOrigins = new Set();
+const _proxyOrigins = new Set([
+    'https://jannyai.com',
+    'https://botbooru.com',
+    'https://api.wyvern.chat',
+    'https://server.pygmalion.chat',
+]);
 
 // Short human snippet from an error body: JSON detail/message/error fields
 // when present, else the tag-stripped raw start. Capped at 200 chars.

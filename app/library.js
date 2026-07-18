@@ -588,6 +588,7 @@ const DEFAULT_SETTINGS = {
     saucepanToken: null,
     datacatPublicFeed: false,
     datacatReextractOnUpdate: false,
+    datacatFlareSolverrUrl: '',
     janitoraiToken: null,
     janitoraiRefreshToken: null,
     botbooruToken: null,
@@ -2796,6 +2797,83 @@ function setupSettingsModal() {
                 setSetting('botbooruShowNsfl', botbooruShowNsflCheckbox.checked);
                 setSetting('botbooruNsfwAccountSynced', false);
                 window.ProviderRegistry?.getProvider('botbooru')?.browseView?.refreshAfterContentFlagsChange?.(wasSynced);
+            });
+        }
+
+        // FlareSolverr endpoint for Hampter sort orders
+        const datacatFlareSolverrInput = document.getElementById('settingsDatacatFlareSolverrUrl');
+        const datacatFlareSolverrStatus = document.getElementById('datacatFlareSolverrStatus');
+        const testDatacatFlareSolverrBtn = document.getElementById('testDatacatFlareSolverrBtn');
+
+        const updateFlareSolverrStatusBadge = () => {
+            if (!datacatFlareSolverrStatus) return;
+            const url = (getSetting('datacatFlareSolverrUrl') || '').trim();
+            if (!url) {
+                datacatFlareSolverrStatus.className = 'settings-status-badge inactive';
+                datacatFlareSolverrStatus.innerHTML = '<i class="fa-solid fa-circle"></i> Not configured';
+            } else {
+                datacatFlareSolverrStatus.className = 'settings-status-badge active';
+                datacatFlareSolverrStatus.innerHTML = '<i class="fa-solid fa-circle"></i> Configured (untested)';
+            }
+        };
+
+        if (datacatFlareSolverrInput) {
+            datacatFlareSolverrInput.value = getSetting('datacatFlareSolverrUrl') || '';
+            datacatFlareSolverrInput.addEventListener('change', () => {
+                setSetting('datacatFlareSolverrUrl', datacatFlareSolverrInput.value.trim());
+                updateFlareSolverrStatusBadge();
+            });
+            datacatFlareSolverrInput.addEventListener('blur', () => {
+                setSetting('datacatFlareSolverrUrl', datacatFlareSolverrInput.value.trim());
+                updateFlareSolverrStatusBadge();
+            });
+        }
+        updateFlareSolverrStatusBadge();
+
+        if (testDatacatFlareSolverrBtn) {
+            testDatacatFlareSolverrBtn.addEventListener('click', async () => {
+                const url = (datacatFlareSolverrInput?.value || '').trim();
+                if (!url) {
+                    showToast('Enter a FlareSolverr URL first', 'warning');
+                    return;
+                }
+                setSetting('datacatFlareSolverrUrl', url);
+                if (datacatFlareSolverrStatus) {
+                    datacatFlareSolverrStatus.className = 'settings-status-badge inactive';
+                    datacatFlareSolverrStatus.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
+                }
+                testDatacatFlareSolverrBtn.disabled = true;
+                try {
+                    const resp = await apiRequest(`/plugins/cl-helper/flaresolverr-fetch`, 'POST', {
+                        flareUrl: url,
+                        targetUrl: 'https://janitorai.com/hampter/characters?sort=trending&page=1',
+                    });
+                    const payload = await resp.json().catch(() => null);
+                    if (!resp.ok || !payload) {
+                        const msg = payload?.error || `HTTP ${resp.status}`;
+                        throw new Error(msg);
+                    }
+                    if (payload.status !== 'ok') {
+                        throw new Error(payload.message || 'FlareSolverr did not return ok');
+                    }
+                    const upstreamStatus = payload.solution?.status;
+                    if (typeof upstreamStatus === 'number' && upstreamStatus >= 400) {
+                        throw new Error(`Upstream HTTP ${upstreamStatus} (challenge not bypassed)`);
+                    }
+                    if (datacatFlareSolverrStatus) {
+                        datacatFlareSolverrStatus.className = 'settings-status-badge active';
+                        datacatFlareSolverrStatus.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connected';
+                    }
+                    showToast('FlareSolverr connection successful', 'success');
+                } catch (err) {
+                    if (datacatFlareSolverrStatus) {
+                        datacatFlareSolverrStatus.className = 'settings-status-badge inactive';
+                        datacatFlareSolverrStatus.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Failed`;
+                    }
+                    showToast(`FlareSolverr test failed: ${err.message}`, 'error');
+                } finally {
+                    testDatacatFlareSolverrBtn.disabled = false;
+                }
             });
         }
 
@@ -16977,8 +17055,15 @@ function setupEventListeners() {
     // Sort - delegate to performSearch so there is ONE sort+render codepath.
     // This eliminates the dual-sort bug where the sort handler and performSearch
     // could produce different results from stale/divergent data.
-    on('sortSelect', 'change', (e) => {
+    on('sortSelect', 'change', async (e) => {
         if (e?.target?.value === 'random') reshuffleRandomSort();
+        // Chat count sorts need async pre-loading — fetch counts then re-render.
+        if (e?.target?.value === 'chats_most' || e?.target?.value === 'chats_least') {
+            if (_chatCountCache.size === 0 && !_chatCountLoading) {
+                showToast('Loading chat counts...', 'info', 3000);
+                await ensureChatCountsLoaded();
+            }
+        }
         performSearch();
     });
     
