@@ -580,6 +580,10 @@ export function renderSkeletonGrid(...args) {
     window.renderSkeletonGrid?.(...args);
 }
 
+export function openGalleryInfoModal(...args) {
+    window.openGalleryInfoModal?.(...args);
+}
+
 export function renderEmptyState(container, opts) {
     window.renderEmptyState?.(container, opts);
 }
@@ -598,6 +602,14 @@ export function getListingNameFromExtensions(char) {
 
 export function bumpAvatarCacheBust(...args) {
     return window.bumpAvatarCacheBust?.(...args);
+}
+
+export function getCharacterAvatarUrl(...args) {
+    return window.getCharacterAvatarUrl?.(...args) ?? '';
+}
+
+export function notifySTCharacterEdited(...args) {
+    return window.notifySTCharacterEdited?.(...args);
 }
 
 export function getDisplayTagline(...args) {
@@ -1382,10 +1394,13 @@ export default {
     // Rendering
     renderLoadingState,
     renderSkeletonGrid,
+    openGalleryInfoModal,
     renderEmptyState,
     getCharacterAvatarStThumbUrl,
     getListingNameFromExtensions,
     bumpAvatarCacheBust,
+    getCharacterAvatarUrl,
+    notifySTCharacterEdited,
     getDisplayTagline,
     getCharacterName,
     formatRichText,
