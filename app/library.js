@@ -10672,6 +10672,7 @@ function prefetchModalNeighbors(currentChar) {
 
 function isCharModalDirty() {
     if (!activeChar || isEditLocked) return false;
+    if (!Object.keys(originalValues).length) return false;
     if (pendingAvatarFile) return true;
     try {
         const current = collectEditValues();
@@ -10744,6 +10745,9 @@ async function openModal(char, { navList } = {}) {
     if (isSwap && isCharModalDirty()) {
         const action = await resolveUnsavedCharModalEdits();
         if (action === 'cancel') return;
+        if (_editPanePopulated) {
+            originalValues = collectEditValues();
+        }
     }
     if (isSwap) {
         setEditLock(!getSetting('alwaysEditEnabled'));
@@ -17154,6 +17158,29 @@ function setupEventListeners() {
         e.preventDefault();
         navigateModal(e.key === 'ArrowLeft' ? -1 : 1);
     });
+
+    // Auto-save provider-link metadata (tagline + listingName) on edit so dirty state never blocks nav.
+    const _autoSaveProviderMeta = async () => {
+        if (isEditLocked || !activeChar) return;
+        const tagline = document.getElementById('editTagline')?.value ?? '';
+        const listingName = document.getElementById('editListingName')?.value ?? '';
+        const activeNs = window.ProviderRegistry?.getActiveTaglineNamespace?.(activeChar) ?? 'cl';
+        const updates = {
+            [`extensions.${activeNs}.tagline`]: tagline,
+            [`extensions.${activeNs}.pageName`]: listingName,
+        };
+        const ok = await window.applyCardFieldUpdates(activeChar.avatar, updates);
+        if (ok) {
+            originalValues.tagline = tagline;
+            originalValues.listingName = listingName;
+            activeChar._lowerListingName = (listingName || '').toLowerCase();
+            activeChar._lowerTagline = getDisplayTagline(activeChar).toLowerCase();
+        }
+    };
+    const taglineInput = document.getElementById('editTagline');
+    const listingNameInput = document.getElementById('editListingName');
+    if (taglineInput) taglineInput.addEventListener('change', _autoSaveProviderMeta);
+    if (listingNameInput) listingNameInput.addEventListener('change', _autoSaveProviderMeta);
 
     // Tabs
     getTabButtons().forEach(btn => {

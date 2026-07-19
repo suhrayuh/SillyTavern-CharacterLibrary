@@ -605,7 +605,7 @@ window.janitoraiForceRefresh = async () => janitoraiDoRefresh();
 // good token, and failing after the up-front rotation would strand the fresh pair.
 window.janitoraiSetSession = async (pasted) => {
     const pair = parseJanitoraiSession(pasted);
-    if (!pair) return { ok: false, error: 'Could not find a session in that value. Copy the whole sb-auth-auth-token cookie.' };
+    if (!pair) return { ok: false, error: 'Could not find a session in that value. Copy the whole sb-auth-auth-token cookie (if you see .0 and .1, concatenate them in order).' };
     const { email, expMs } = decodeJanitoraiClaims(pair.access_token);
     let token = pair.access_token;
     // If the pasted access token is already stale but a refresh token came with it, rotate up front.
