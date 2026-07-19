@@ -319,8 +319,6 @@ function advanceDatacatPage() {
         hampterCurrentPage++;
     } else if (isJannySortMode(datacatSortMode)) {
         meiliCurrentPage++;
-    } else if (isSaucepanSortMode(datacatSortMode)) {
-        saucepanCurrentPage++;
     } else {
         const parsed = parseSortMode(datacatSortMode);
         // Mirrors isFreshMode: tag-filtered or searched fresh sorts load via the offset endpoint,
@@ -507,7 +505,7 @@ async function loadCharacters(append = false) {
         // Creator mode fetches by offset regardless of any lingering browse sort, so it must route
         // here first like the fetch branch above does (sort-keyed routing used to send creator
         // appends through stale meili/hampter page math when such a sort was left selected)
-        const isOffsetMode = datacatBrowseMode === 'creator' || (!isMeili && !isHampter && !isSaucepan && !isFreshMode);
+        const isOffsetMode = datacatBrowseMode === 'creator' || (!isMeili && !isHampter && !isFreshMode);
 
         if (isOffsetMode) {
             if (append) {
@@ -1123,6 +1121,18 @@ function updateSearchPlaceholder() {
     const input = document.getElementById('datacatSearchInput');
     if (!input) return;
     input.placeholder = 'Search characters or paste a URL...';
+}
+
+function switchToMeiliSearch(query) {
+    datacatSortMode = 'janny_relevant';
+    const sortEl = document.getElementById('datacatSortSelect');
+    if (sortEl) sortEl.value = 'janny_relevant';
+    meiliSearchQuery = query;
+    meiliCurrentPage = 1;
+    datacatCurrentOffset = 0;
+    updateSearchPlaceholder();
+    updateTagsVisibility();
+    loadCharacters(false);
 }
 
 function doSearch() {
