@@ -15603,7 +15603,7 @@ function openBrowseExpandedView(sectionId, label, iconClass) {
                     </div>
                 </div>
                 <div class="browse-expand-body">
-                    <iframe id="chubExpandIframe" sandbox="allow-same-origin"></iframe>
+                    <iframe id="chubExpandIframe" sandbox="allow-same-origin allow-scripts"></iframe>
                 </div>
             </div>
         </div>
@@ -27847,7 +27847,7 @@ function estimateCreatorNotesHeight(html) {
  */
 function createCreatorNotesIframe(srcdoc, initialHeight) {
     const iframe = document.createElement('iframe');
-    iframe.sandbox = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+    iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox';
     const h = initialHeight || CreatorNotesConfig.MIN_HEIGHT;
     iframe.style.cssText = `
         width: 100%;
@@ -28118,7 +28118,7 @@ function openCreatorNotesFullscreen(content, charName, urlMap) {
                 <div class="creator-notes-fullscreen-body">
                     <iframe 
                         id="creatorNotesFullscreenIframe"
-                        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
                     ></iframe>
                 </div>
             </div>
