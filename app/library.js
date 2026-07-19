@@ -21764,6 +21764,18 @@ async function saveProviderLink(char, provider, linkInfo) {
         try { await window.autoSnapshotBeforeChange(char, 'link'); } catch (_) {}
     }
 
+    // Re-resolve char from the live char list. After a recent Edit-tab save, the
+    // grid re-sorts and `allCharacters` may be rebuilt, leaving `activeChar`
+    // pointing at a stale object. Mutating that stale object (via setLinkInfo)
+    // then writing via applyCardFieldUpdates would silently drop the link.
+    const freshChar = allCharacters.find(c => c.avatar === char.avatar) || char;
+    if (freshChar !== char) char = freshChar;
+    let mainChar = null;
+    try {
+        const context = getSTContext();
+        mainChar = context?.characters?.find(c => c.avatar === char.avatar) || null;
+    } catch (_) { /* non-critical */ }
+
     // Populate provider namespace + drop cl in-memory so the spread carries the new link and the cl-delete has a target.
     provider.setLinkInfo(char, linkInfo);
     const charInArray = allCharacters.find(c => c.avatar === char.avatar);
@@ -21774,12 +21786,16 @@ async function saveProviderLink(char, provider, linkInfo) {
         if (c.data?.extensions && 'cl' in c.data.extensions) delete c.data.extensions.cl;
     }
 
-    // The provider namespace rides the existing-extensions spread. Legacy ownership
-    // namespaces require explicit sentinel deletes so they cannot reclaim the card.
+    // Build the update payload. The provider namespace rides the existing-extensions
+    // spread (Fix A ensures the spread contains it). We ALSO write the namespace
+    // explicitly as a belt-and-suspenders guarantee (Fix B) — if any caller path
+    // ends up mutating a stale ref that isn't the one we later read, the explicit
+    // write ensures the new namespace lands on disk regardless.
     const updates = { 'extensions.cl': ST_UNSET_SENTINEL };
     for (const namespace of provider.getLegacyLinkNamespaces?.(char) || []) {
         updates[`extensions.${namespace}`] = ST_UNSET_SENTINEL;
     }
+    updates[`extensions.${provider.id}`] = linkInfo;
     const success = await window.applyCardFieldUpdates(char.avatar, updates);
     if (!success) throw new Error('Failed to save provider link');
 
@@ -21793,11 +21809,7 @@ async function saveProviderLink(char, provider, linkInfo) {
     }
 
     // Same-tick ST sync: setLinkInfo on mainChar makes the new link visible immediately, ahead of the async refetch.
-    try {
-        const context = getSTContext();
-        const mainChar = context?.characters?.find(c => c.avatar === char.avatar);
-        if (mainChar) provider.setLinkInfo(mainChar, linkInfo);
-    } catch (_) { /* non-critical */ }
+    if (mainChar && mainChar !== char) provider.setLinkInfo(mainChar, linkInfo);
 }
 
 // ========================================
